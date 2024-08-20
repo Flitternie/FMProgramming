@@ -7,10 +7,14 @@ def compute(input, program):
         function, cost = subprogram
         if function == "functionA":
             output, cost = functionA(info, cost)
+            if output == False:
+                pass
             info.append(output)
             costs.append(cost)
         elif function == "functionB":
             output, cost = functionB(info, cost)
+            if output == False:
+                pass
             info.append(output)
             costs.append(cost)
         else:

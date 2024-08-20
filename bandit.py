@@ -1,6 +1,9 @@
 import numpy as np
 import torch
 import torch.optim as optim
+import torch.nn as nn
+from scipy.optimize import linprog
+from itertools import product
 from network import ModuleNetwork, AggregateNetwork
 
 # Check if CUDA (GPU) is available and set the device accordingly
@@ -9,9 +12,8 @@ if torch.cuda.is_available():
 else:  
     dev = "cpu" 
 device = torch.device(dev)
-print(device)
 
-# Define the MuFasa class
+
 class MuFasa:
     def __init__(self, modules, input_size, lambd=1, nu=0.1, hidden_size=128):
         # Initialize the network
@@ -68,7 +70,7 @@ class MuFasa:
         context_list = self.context_list
         reward = self.reward
                 
-        optimizer = optim.SGD(self.aggregator.parameters(), lr=1e-2, weight_decay=self.lambd)
+        optimizer = optim.SGD(self.aggregator.parameters(), lr=0.0001, weight_decay=self.lambd)
         length = len(reward)
         index = np.arange(length)
         np.random.shuffle(index)
@@ -94,19 +96,22 @@ class MuFasa:
                 return batch_loss / length
 
 class UCB1:
-    def __init__(self, modules):
+    def __init__(self, modules, alpha=2):
         n_arms = 1
         for _, num_arms in modules.items():
             n_arms *= num_arms
-        self.counts = np.zeros(n_arms)  # Number of times each arm was pulled
-        self.values = np.zeros(n_arms)  # Average reward for each arm
+        self.num_arms = n_arms
+        self.counts = np.zeros(self.num_arms)  # Number of times each arm was pulled
+        self.values = np.zeros(self.num_arms)  # Average reward for each arm
+        self.alpha = alpha  # Exploration hyperparameter
 
-    def select(self):
+    def select(self, t):
         n_pulls = sum(self.counts)
         if 0 in self.counts:
             # Pull each arm at least once
             return np.argmin(self.counts)
-        ucb_values = self.values + np.sqrt(2 * np.log(n_pulls) / self.counts)
+        # Adjust exploration term using alpha
+        ucb_values = self.values + np.sqrt(self.alpha * np.log(n_pulls) / self.counts)
         return np.argmax(ucb_values)
 
     def update(self, chosen_arm, reward):
@@ -115,3 +120,123 @@ class UCB1:
         value = self.values[chosen_arm]
         # Update the average reward using incremental formula
         self.values[chosen_arm] = value + (reward - value) / n
+
+
+class UCB_ALP:
+    def __init__(self, modules, module_costs, budget, horizon):
+        self.modules = modules
+        self.module_costs = [costs for costs in module_costs.values()]
+        self.budget = budget
+        self.horizon = horizon
+
+        self.arms = self.generate_arms()
+        self.num_arms = len(self.arms)
+        self.costs = self.compute_arm_costs()
+
+        self.ucbs = np.ones(self.num_arms)
+        self.counts = np.zeros(self.num_arms)
+        self.rewards = np.zeros(self.num_arms)
+        self.remaining_budget = budget
+
+    def generate_arms(self):
+        """ Generate all possible combinations of modules filling the holes. """
+        indices = [range(self.modules[func]) for func in self.modules.keys()]
+        return list(product(*indices))
+    
+    def compute_arm_costs(self):
+        """ Compute the cost of a given arm. """
+        return np.array([sum(self.module_costs[hole][module] for hole, module in enumerate(arm)) for arm in self.arms])
+
+    def update_ucb(self, t):
+        """ Update the UCB values based on counts and observed rewards. """
+        for i in range(self.num_arms):
+            if self.counts[i] > 0:
+                avg_reward = self.rewards[i] / self.counts[i]
+                self.ucbs[i] = avg_reward + np.sqrt((2 * np.log(t)) / self.counts[i])
+            else:
+                self.ucbs[i] = 1  # High UCB to ensure exploration
+    
+    def solve_lp(self):
+        """ Solve the linear programming problem to determine action probabilities. """
+        c = -self.ucbs.flatten()  # Minimize the negative of UCBs to maximize UCBs
+        A = [self.costs]  # Cost constraints
+        b = [self.remaining_budget / self.horizon]  # Remaining budget per unit time
+        bounds = [(0, 1)] * self.num_arms
+        res = linprog(c, A_eq=A, b_eq=b, bounds=bounds, method='highs')
+        if res.success:
+            return res.x
+        else:
+            return np.zeros(self.num_arms)
+
+    def select(self, t):
+        self.update_ucb(t)
+        if self.remaining_budget > 0:
+            action_probs = self.solve_lp()
+            if not np.any(action_probs):  # Check if weights are all zeros
+                return None  # No action taken if all weights are zero due to budget constraints
+            total_probs = np.sum(action_probs)
+            normalized_weights = action_probs / total_probs
+            chosen_arm = np.random.choice(range(self.num_arms), p=normalized_weights)
+            # cost = self.costs[chosen_arm]
+            return chosen_arm
+        else:
+            return None
+
+    def update(self, chosen_arm, reward):
+        self.rewards[chosen_arm] += reward
+        self.counts[chosen_arm] += 1
+        cost = self.costs[chosen_arm]
+        self.remaining_budget -= cost
+        self.horizon -= 1 
+
+class UCBContextualBandit:
+    def __init__(self, modules, input_size, alpha=1.0):
+        self.alpha = alpha  # Exploration coefficient
+        self.input_size = input_size  # Dimension of input context
+        self.n_arms = 1
+        for _, num_arms in modules.items():
+            self.n_arms *= num_arms  # Total number of arm combinations
+        
+        self.counts = np.zeros(self.n_arms)  # Times each arm has been selected
+        self.values = np.zeros(self.n_arms)  # Average reward of each arm
+        self.modules = list(modules.keys())  # Names of the modules
+        self.features = [torch.nn.Parameter(torch.randn(input_size)) for _ in range(self.n_arms)]  # Simulated features for each arm
+        
+        # Simulation of a simple linear predictor for contextual bandits
+        self.weights = [torch.nn.Parameter(torch.randn(input_size)) for _ in range(self.n_arms)]  # Weights for each module
+
+    def select(self, context):
+        context_tensor = torch.tensor(context).float()
+        ucb_values = np.zeros(self.n_arms)
+        
+        for i in range(self.n_arms):
+            # Simple linear prediction model
+            predicted_reward = torch.dot(self.weights[i], context_tensor).item()
+            
+            if self.counts[i] == 0:
+                # If an arm hasn't been pulled, prioritize it
+                ucb_values[i] = float('inf')
+            else:
+                # Calculate UCB value for the arm
+                exploration_term = np.sqrt(self.alpha * np.log(sum(self.counts) + 1) / self.counts[i])
+                ucb_values[i] = predicted_reward + exploration_term
+        
+        chosen_arm = np.argmax(ucb_values)
+        return chosen_arm
+
+    def update(self, chosen_arm, reward, context):
+        # Update the counts and the average reward values for the chosen arm
+        self.counts[chosen_arm] += 1
+        n = self.counts[chosen_arm]
+        value = self.values[chosen_arm]
+        new_value = value + (reward - value) / n
+        self.values[chosen_arm] = new_value
+        
+        # Simulate feature update (notional, for illustrative purposes)
+        context_tensor = torch.tensor(context).float()
+        gradient = (reward - torch.dot(self.weights[chosen_arm], context_tensor)) * context_tensor
+        self.weights[chosen_arm] += 0.01 * gradient  # Fake learning rate
+
+    def train(self):
+        # Not needed for this simple implementation, unless real learning is to be done
+        pass
