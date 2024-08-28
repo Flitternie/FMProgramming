@@ -7,12 +7,15 @@ from sentence_transformers import SentenceTransformer
 
 class ComplexityMeasurer:
     def __init__(self, corpus_sentences):
-        # Load sentence transformer model
+        # Load the sentence transformer model
         self.model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
         corpus_embeddings = self.model.encode(corpus_sentences)
         self.corpus_mean_embedding = np.mean(corpus_embeddings, axis=0)
-        self.min_score = 5.5
-        self.max_score = 6.45
+        
+        # Compute initial complexity scores to establish min and max scores dynamically
+        initial_scores = [self.semantic_complexity(self.model.encode(sentence)) for sentence in corpus_sentences]
+        self.min_score = min(initial_scores)
+        self.max_score = max(initial_scores)
 
     def vector_entropy(self, vector):
         """Compute entropy of the vector."""
@@ -23,28 +26,27 @@ class ComplexityMeasurer:
         """Compute the cosine similarity between two vectors."""
         return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
-    def semantic_complexity(self, sentence):
-        # Encode the sentence to get the embedding
-        embedding = self.model.encode(sentence)
-        # Measure vector entropy
+    def semantic_complexity(self, embedding):
+        """Calculate the semantic complexity of a sentence."""
         entropy_score = self.vector_entropy(embedding)
-        # Measure deviation from corpus mean
         deviation_score = 1 - self.cosine_similarity(embedding, self.corpus_mean_embedding)
-        # Combine the scores
-        complexity_score = entropy_score + deviation_score
+        complexity_score = 0.5 * entropy_score + 0.5 * deviation_score
         return complexity_score
 
     def normalize_scores(self, score):
-        """Normalize a list of scores to the range [0, 1]."""
+        """Normalize a score to the range [0, 1]."""
         normalized_score = (score - self.min_score) / (self.max_score - self.min_score)
         return normalized_score
 
-    def complexity(self, embedding):
-        """Measure the complexity of the input."""
-        entropy_score = self.vector_entropy(embedding)
-        deviation_score = 1 - self.cosine_similarity(embedding, self.corpus_mean_embedding)
-        complexity_score = entropy_score + deviation_score
-        return self.normalize_scores(complexity_score)
+    def complexity(self, sentence):
+        """Measure and normalize the complexity of the input sentence."""
+        raw_complexity = self.semantic_complexity(sentence)
+        return self.normalize_scores(raw_complexity)
+
+    def update_score_range(self, new_scores):
+        """Update the score range based on new computed scores."""
+        self.min_score = min(self.min_score, min(new_scores))
+        self.max_score = max(self.max_score, max(new_scores))
 
 class Dataset:
     def __init__(self, data, size):

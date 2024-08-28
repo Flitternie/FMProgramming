@@ -1,4 +1,4 @@
-from functionality import functionA, functionB
+from functionality import functionA, functionB, functionC
 
 def compute(input, program):
     info = [input]
@@ -17,8 +17,12 @@ def compute(input, program):
                 pass
             info.append(output)
             costs.append(cost)
-        else:
-            raise ValueError("Invalid function")
+        elif function == "functionC":
+            output, cost = functionC(info, cost)
+            if output == False:
+                pass
+            info.append(output)
+            costs.append(cost)
     return info[-1], sum(costs)
 
 def idx_to_arms(idx, modules):
@@ -36,6 +40,8 @@ def routing(input, program, selected_arms):
             routed_program.append(("functionA", selected_arms[0]))
         elif step[0] == "functionB":
             routed_program.append(("functionB", selected_arms[1]))
+        elif step[0] == "functionC":
+            routed_program.append(("functionC", selected_arms[2]))
         else:
             raise ValueError("Invalid function")
     exec_result, exec_cost = compute(input, routed_program)
