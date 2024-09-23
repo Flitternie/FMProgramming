@@ -1,8 +1,13 @@
 import numpy as np
 import datasets
+import pickle
 import pandas as pd
 from scipy.stats import entropy
 from sentence_transformers import SentenceTransformer
+
+'''
+This file contains the code to load the dataset and the complexity measurer.
+'''
 
 
 class ComplexityMeasurer:
@@ -71,10 +76,26 @@ class Dataset:
     def reset(self):
         self.cursor = 0
 
-data = datasets.Dataset.from_pandas(pd.read_csv("./imdb_preprocessed.csv"))
-data.shuffle(seed=42)
-num_sample = 1000
-measurer = ComplexityMeasurer(data[:num_sample]['text'])
+
+# Intialize the dataset and the complexity measurer, and save them to cache
+num_sample = 2000 # Number of samples to use for the dataset
+try: 
+    with open('measurer.pkl', 'rb') as f:
+        measurer = pickle.load(f)
+    with open('dataset.pkl', 'rb') as f:
+        data = pickle.load(f)
+    print("Data and measurer loaded from cache")
+except:
+    print("Creating new data and measurer")
+    data = datasets.Dataset.from_pandas(pd.read_csv("./imdb_preprocessed.csv"))
+    data.shuffle(seed=7)
+    measurer = ComplexityMeasurer(data[:num_sample]['text'])
+
+    with open('measurer.pkl', 'wb') as f:
+        pickle.dump(measurer, f)
+    with open('dataset.pkl', 'wb') as f:
+        pickle.dump(data, f)
+    print("Data and measurer saved to cache")
 
 def get_dataset():
     return Dataset(data, num_sample)

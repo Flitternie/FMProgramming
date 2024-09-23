@@ -6,6 +6,14 @@ from scipy.optimize import linprog
 from itertools import product
 from network import ModuleNetwork, AggregateNetwork
 
+'''
+This file contains the implementation of the following bandit algorithms:
+1. Multi-facet Contextual Bandits (MuFasa)
+2. Upper Confidence Bound (UCB1)
+3. UCB with Linear Programming (UCB_ALP)
+4. Contextual Bandits (Contextual)
+'''
+
 # Check if CUDA (GPU) is available and set the device accordingly
 if torch.cuda.is_available():  
     dev = "cuda:0" 
@@ -14,6 +22,7 @@ else:
 device = torch.device(dev)
 
 
+# Multi-facet Contextual Bandit algorithm, from paper "Multi-facet Contextual Bandits: A Neural Network Perspective", original code at https://github.com/banyikun/KDD2021_MuFasa
 class MuFasa:
     def __init__(self, modules, input_size, lambd=1, nu=0.1, hidden_size=128):
         # Initialize the network
@@ -60,7 +69,7 @@ class MuFasa:
         self.U += g_list[arm] * g_list[arm]
         return arm
     
-    def update(self, context, final_r, t):
+    def update(self, context, _, final_r, t):
         # Update context and reward lists with observed final rewards
         self.context_list.append(context)
         self.reward_list.append(final_r)
@@ -96,6 +105,7 @@ class MuFasa:
                 return batch_loss / length
 
 
+# Classical UCB algorithm
 class UCB1:
     def __init__(self, modules, alpha=1):
         n_arms = 1
@@ -123,6 +133,7 @@ class UCB1:
         self.values[chosen_arm] = value + (reward - value) / n
 
 
+# UCB algorithm with linear programming for budget constraints
 class UCB_ALP:
     def __init__(self, modules, module_costs, budget, horizon):
         self.modules = modules
@@ -191,23 +202,25 @@ class UCB_ALP:
         self.horizon -= 1 
 
 
+# Contextual UCB algorithm
 class Contextual:
-    def __init__(self, modules, input_size, lambd=1, nu=0.1, hidden_size=128):
+    def __init__(self, modules, input_size, lambd=1, nu=0.1, hidden_size=512):
         # Initialize the network
         self.input_size = input_size  # Dimension of input context
         n_arms = 1
         for _, num_arms in modules.items():
             n_arms *= num_arms
         self.num_arms = n_arms
-        self.embedding_size = hidden_size
+        self.hidden_size = hidden_size
         self.lambd = lambd
         self.nu = nu
 
         # Arm embeddings
-        self.arm_embeddings = torch.nn.Embedding(self.num_arms, self.embedding_size).to(device)
+        self.arm_embeddings = torch.nn.Embedding(self.num_arms, self.hidden_size).to(device)
         
         # Context transformation
-        self.context_transform = torch.nn.Linear(self.input_size, self.embedding_size).to(device)
+        self.context_transform = torch.nn.Linear(self.input_size, self.hidden_size).to(device)
+        self.relu = torch.nn.ReLU().to(device)
         
         total_params = sum(p.numel() for p in self.arm_embeddings.parameters() if p.requires_grad)
         total_params += sum(p.numel() for p in self.context_transform.parameters() if p.requires_grad)
@@ -218,18 +231,21 @@ class Contextual:
         self.arm_list = []
         self.reward_list = []
         
-    def select(self, context, t):
+    def select(self, context, arm_costs, weight, t):
         # Convert context to tensors
         input = torch.tensor(context).float().to(device)
         transformed_context = self.context_transform(input)
+        transformed_context = self.relu(transformed_context)
         
         g_list = []  # Gradients list
         sampled_rewards = []  # Sampled rewards
+        true_rewards = []  # True rewards
         
         # Compute the sigma and sampled reward for each arm combination
         for arm_index in range(self.num_arms):
             arm_embedding = self.arm_embeddings(torch.tensor([arm_index]).to(device))
             reward_prediction = torch.dot(transformed_context, arm_embedding.flatten())
+            reward_prediction = self.sigmoid(reward_prediction)
 
             # Calculate gradient for UCB
             self.arm_embeddings.zero_grad()
@@ -243,14 +259,15 @@ class Contextual:
             
             sigma2 = self.lambd * gradients * gradients / self.U
             sigma = torch.sqrt(torch.sum(sigma2))
-            sampled_r = reward_prediction.item() + self.nu * sigma.item()
+            sampled_r = reward_prediction.item() + self.nu * sigma.item() - arm_costs[arm_index] * 100 * weight
+            true_rewards.append(reward_prediction.item())
             sampled_rewards.append(sampled_r)
             g_list.append(gradients)
         
         # Select arm based on UCB
         selected_arm = np.argmax(sampled_rewards)
         self.U += g_list[selected_arm] * g_list[selected_arm]
-        return selected_arm
+        return selected_arm, sampled_rewards, true_rewards
     
     def update(self, context, arm_idx, final_r, t):
         # Update context and reward lists with observed final rewards
@@ -258,42 +275,72 @@ class Contextual:
         self.arm_list.append(arm_idx)
         self.reward_list.append(final_r)
     
-    def train(self):
+    def train(self, num_epochs=5, batch_size=16, lr=0.0003):
         # Train the network on observed data
         optimizer = optim.SGD(list(self.arm_embeddings.parameters()) + 
                               list(self.context_transform.parameters()), 
-                              lr=0.0003)
+                              lr=lr)
         
         index = np.arange(len(self.reward_list))
         context_list = self.context_list
         arm_list = self.arm_list
         reward_list = self.reward_list
-
+    
         np.random.shuffle(index)
         length = len(reward_list)
-        cnt = 0
         total_loss = 0
-        while True:
+        
+        if length < batch_size:
+            # Process the entire dataset in a single batch
+            optimizer.zero_grad()
             batch_loss = 0
-            for idx in index:
+            
+            for i in range(length):
+                idx = index[i]
                 context = context_list[idx]
                 context = torch.from_numpy(context).float().to(device)
                 transformed_context = self.context_transform(context)
                 r = reward_list[idx]
                 arm = arm_list[idx]
-
+    
                 arm_embedding = self.arm_embeddings(torch.tensor([arm]).to(device))
                 predicted_reward = torch.dot(transformed_context, arm_embedding.flatten())
 
+                # MSE loss for reward prediction
                 loss = (predicted_reward - r) ** 2
-                optimizer.zero_grad()
-                
-                loss.backward()
-                optimizer.step()
-                batch_loss += loss.item()
-                total_loss += loss.item()
-                cnt += 1
-                if cnt >= 1000:
-                    return total_loss / 1000
-            if batch_loss / length <= 1e-3:
-                return batch_loss / length
+                batch_loss += loss
+            
+            batch_loss /= length
+            batch_loss.backward()
+            optimizer.step()
+            total_loss = batch_loss.item()
+            average_loss = total_loss
+        else:
+            num_batches = min(batch_size, length // batch_size)
+            for epoch in range(num_epochs):
+                for batch_idx in range(num_batches):
+                    batch_loss = 0
+                    optimizer.zero_grad()
+                    
+                    for i in range(batch_size):
+                        idx = index[batch_idx * batch_size + i]
+                        context = context_list[idx]
+                        context = torch.from_numpy(context).float().to(device)
+                        transformed_context = self.context_transform(context)
+                        r = reward_list[idx]
+                        arm = arm_list[idx]
+        
+                        arm_embedding = self.arm_embeddings(torch.tensor([arm]).to(device))
+                        predicted_reward = torch.dot(transformed_context, arm_embedding.flatten())
+        
+                        loss = (predicted_reward - r) ** 2
+                        batch_loss += loss
+                    
+                    batch_loss /= batch_size
+                    batch_loss.backward()
+                    optimizer.step()
+                    total_loss += batch_loss.item()
+            
+            average_loss = total_loss / (num_batches * num_epochs)
+        
+        return average_loss

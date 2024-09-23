@@ -6,11 +6,19 @@ __pycache__/
 # Custom data files
 misc/
 logs/
+COLA/
+coco/
+MSCOCO*/
+neural_bandit/
+
 *.log
 *.txt
 *.ipynb
 *.csv
 *.pkl
+*.png
+*.lock
+*.db
 
 # C extensions
 *.so
