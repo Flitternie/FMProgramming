@@ -1,9 +1,15 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
+
+'''
+This file contains the neural network classes for the bandit modules and the aggregation network, which are used in the MuFasa algorithm, 
+see the paper "Multi-facet Contextual Bandits: A Neural Network Perspective", original code at https://github.com/banyikun/KDD2021_MuFasa 
+'''
 
 class ModuleNetwork(nn.Module):
+    '''
+    This class defines the neural network for each bandit module, which takes in a context and outputs the expected reward for each arm.
+    '''
     def __init__(self, idx, name, input_dim, hidden_size, num_arms):
         super(ModuleNetwork, self).__init__()
         self.__index__ = idx
@@ -22,6 +28,9 @@ class ModuleNetwork(nn.Module):
         return out
 
 class AggregateNetwork(nn.Module):
+    '''
+    This class defines the neural network that aggregates the outputs of the bandit modules to compute the expected reward for each combination of arms.
+    '''
     def __init__(self, module_networks, hidden_size):
         super(AggregateNetwork, self).__init__()
         self.module_networks = nn.ModuleList(module_networks)
@@ -40,9 +49,12 @@ class AggregateNetwork(nn.Module):
         out = self.fc2(out)
         return out.view(-1)  # Flatten to [num_combinations]
 
-'''
 
-class ModuleNetwork(nn.Module):
+
+class LSTMModuleNetwork(nn.Module):
+    '''
+    This class defines the neural network for each bandit module, which uses an LSTM to model the sequence of actions and rewards.
+    '''
     def __init__(self, input_size, hidden_size, num_arms, lambd=1.0, nu=0.1):
         super(ModuleNetwork, self).__init__()
         self.lstm = nn.LSTM(input_size + 1, hidden_size)  # +1 for the subreward input
@@ -103,7 +115,10 @@ class ModuleNetwork(nn.Module):
         return (torch.zeros(1, 1, self.hidden_size),
                 torch.zeros(1, 1, self.hidden_size))
 
-class AggregateNetwork(nn.Module):
+class LSTMAggregateNetwork(nn.Module):
+    '''
+    This class defines the neural network that aggregates the outputs of the bandit modules based on a tree structure.
+    '''
     def __init__(self, module_dict, input_size):
         super(AggregateNetwork, self).__init__()
         self.module_dict = module_dict
@@ -148,4 +163,3 @@ class AggregateNetwork(nn.Module):
         if type(m) == nn.Linear:
             nn.init.xavier_uniform_(m.weight)
             nn.init.zeros_(m.bias)
-'''

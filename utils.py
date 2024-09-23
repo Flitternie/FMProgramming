@@ -3,13 +3,23 @@ import torch
 import numpy as np 
 from collections import deque, defaultdict
 
+'''
+This file contains utility functions for all experiments.
+'''
+
 def set_seed(seed):
+    '''
+    This function sets the seed for reproducibility.
+    '''
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
 def order_tree(tree):
+    '''
+    This function orders the tree in a topological order and returns the new tree structure and the index of the root node.
+    '''
     # Build the graph and compute in-degrees of nodes
     graph = defaultdict(list)
     in_degree = defaultdict(int)
