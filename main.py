@@ -6,8 +6,8 @@ from tqdm import tqdm
 from data import measurer, get_dataset, num_sample
 from bandit import MuFasa, UCB1, UCB_ALP, Contextual
 from execute import idx_to_arms, routing
-from neural_bandit.neuralts import NeuralTS
-from neural_bandit.neuralucb import NeuralUCB
+from neural_bandit_neuralts import NeuralTS
+from neural_bandit_neuralucb import NeuralUCB
 
 from utils import *
 
@@ -279,8 +279,8 @@ def neural(cost_weighting_list, save_dir="./logs/"):
         dataset = get_dataset()
         input_size = 384
         
-        # algo = NeuralUCB(input_size, num_arms, beta=1, lamb=1)
-        algo = NeuralTS(input_size, num_arms, beta=1, lamb=1)
+        algo = NeuralUCB(input_size, num_arms, beta=1, lamb=1)
+        # algo = NeuralTS(input_size, num_arms, beta=1, lamb=1)
 
         gathered_reward = []
         regrets = []
@@ -316,17 +316,14 @@ def neural(cost_weighting_list, save_dir="./logs/"):
             algo.update(context, arm_idx, final_reward)
 
             
-            if t % 8 == 0:
-                loss = algo.train()
+            if t % 16 == 0:
+                algo.train()
             
             avg_accuracy, avg_cost = total_correct/(t+1), total_cost/(t+1)
             avg_regret = sum(regrets)/len(regrets)
-            try:
-                line = "; ".join(str(i) for i in [t, loss, measurer.complexity(context), selected_arms, exec_result, exec_cost, avg_accuracy, avg_cost, sum(gathered_reward)/len(gathered_reward), avg_regret]) + "\n"
-                pbar.set_description("Accuracy: {:.3f}, Average cost: {:.3f}, Loss: {:3f}, Regret {:.3f}".format(avg_accuracy, avg_cost, loss, avg_regret))
-            except:
-                line = "; ".join(str(i) for i in [t, 0, measurer.complexity(context), selected_arms, exec_result, exec_cost, avg_accuracy, avg_cost, sum(gathered_reward)/len(gathered_reward), avg_regret]) + "\n"
-                pbar.set_description("Accuracy: {:.3f}, Average cost: {:.3f}, Average regret: {:.3f}".format(avg_accuracy, avg_cost, avg_regret))
+
+            line = "; ".join(str(i) for i in [t, 0, measurer.complexity(context), selected_arms, exec_result, exec_cost, avg_accuracy, avg_cost, sum(gathered_reward)/len(gathered_reward), avg_regret]) + "\n"
+            pbar.set_description("Accuracy: {:.3f}, Average cost: {:.3f}, Average regret: {:.3f}".format(avg_accuracy, avg_cost, avg_regret))
             f.write(line)
             pbar.update(1)
         
