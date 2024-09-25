@@ -279,7 +279,7 @@ def neural(cost_weighting_list, save_dir="./logs/"):
         dataset = get_dataset()
         input_size = 384
         
-        algo = NeuralUCB(input_size, num_arms, beta=1, lamb=1)
+        # algo = NeuralUCB(input_size, num_arms, beta=1, lamb=1)
         algo = NeuralTS(input_size, num_arms, beta=1, lamb=1)
 
         gathered_reward = []
@@ -362,16 +362,16 @@ if __name__ == "__main__":
     # ucb1(cost_weighting_list, save_dir, 0.5)
 
     # Test the contextual bandit
-    save_dir = f"./logs/{exp_name}contextual/"
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir, exist_ok=True)
-    contextual(cost_weighting_list, save_dir)
-
-    # Test the neural bandit
-    # save_dir = f"./logs/{exp_name}neural/"
+    # save_dir = f"./logs/{exp_name}contextual/"
     # if not os.path.exists(save_dir):
     #     os.makedirs(save_dir, exist_ok=True)
-    # neural(cost_weighting_list, save_dir)
+    # contextual(cost_weighting_list, save_dir)
+
+    # Test the neural bandit
+    save_dir = f"./logs/{exp_name}neural/"
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+    neural(cost_weighting_list, save_dir)
 
     # Test the baseline
     # baseline()
