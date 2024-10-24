@@ -155,7 +155,7 @@ def ucb1(cost_weighting_list, save_dir="./logs/", arg_nu=1):
             arm_idx = algo.select(context, t) # for UCB1 and UCB_ALP
             if arm_idx is None:
                 raise ValueError("Invalid arm index")
-            selected_arms = idx_to_arms(arm_idx, modules)
+            selected_arms = idx_to_arms(arm_idx, program, modules)
             # Execute the program with the selected arms
             exec_result, exec_cost = routing(context, program, selected_arms)
             total_correct += int(exec_result)
@@ -222,7 +222,7 @@ def contextual(cost_weighting_list, save_dir="./logs/"):
             if arm_idx is None:
                 raise ValueError("Invalid arm index")
             
-            selected_arms = idx_to_arms(arm_idx, modules)
+            selected_arms = idx_to_arms(arm_idx, program, modules)
             # Execute the program with the selected arms
             exec_result, exec_cost, final_reward = get_reward(context, program, arm_idx, arg_cost_weighting, t)
             
@@ -298,7 +298,7 @@ def neural(cost_weighting_list, save_dir="./logs/"):
             if arm_idx is None:
                 raise ValueError("Invalid arm index")
             
-            selected_arms = idx_to_arms(arm_idx, modules)
+            selected_arms = idx_to_arms(arm_idx, program, modules)
             # Execute the program with the selected arms
             exec_result, exec_cost, final_reward = get_reward(context, program, arm_idx, arg_cost_weighting, t)
             
