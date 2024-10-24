@@ -27,9 +27,10 @@ def compute(input, program):
             costs.append(cost)
     return info[-1], sum(costs)
 
-def idx_to_arms(idx, modules):
+def idx_to_arms(idx, program, modules):
     arms = []
-    for _, num_arms in modules.items():
+    for i in program:
+        num_arms = modules[i[0]]
         arms.append(idx % num_arms)
         idx = idx // num_arms
     return arms

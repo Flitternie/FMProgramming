@@ -38,7 +38,7 @@ def baseline():
     for arm_idx in range(num_arms):
         set_seed(7)
         dataset = get_dataset()
-        selected_arms = idx_to_arms(arm_idx, modules)
+        selected_arms = idx_to_arms(arm_idx, program, modules)
         correct = 0
         total_cost = 0
         pbar = tqdm(total=total_len)
@@ -279,8 +279,8 @@ def neural(cost_weighting_list, save_dir="./logs/"):
         dataset = get_dataset()
         input_size = 384
         
-        algo = NeuralUCB(input_size, num_arms, beta=1, lamb=1)
-        # algo = NeuralTS(input_size, num_arms, beta=1, lamb=1)
+        # algo = NeuralUCB(input_size, num_arms, beta=1, lamb=1)
+        algo = NeuralTS(input_size, num_arms, beta=1, lamb=1)
 
         gathered_reward = []
         regrets = []
