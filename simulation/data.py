@@ -80,9 +80,9 @@ class Dataset:
 # Intialize the dataset and the complexity measurer, and save them to cache
 num_sample = 2000 # Number of samples to use for the dataset
 try: 
-    with open('measurer.pkl', 'rb') as f:
+    with open('./simulation/measurer.pkl', 'rb') as f:
         measurer = pickle.load(f)
-    with open('dataset.pkl', 'rb') as f:
+    with open('./simulation/dataset.pkl', 'rb') as f:
         data = pickle.load(f)
     print("Data and measurer loaded from cache")
 except:
@@ -91,9 +91,9 @@ except:
     data.shuffle(seed=7)
     measurer = ComplexityMeasurer(data[:num_sample]['text'])
 
-    with open('measurer.pkl', 'wb') as f:
+    with open('./simulation/measurer.pkl', 'wb') as f:
         pickle.dump(measurer, f)
-    with open('dataset.pkl', 'wb') as f:
+    with open('./simulation/dataset.pkl', 'wb') as f:
         pickle.dump(data, f)
     print("Data and measurer saved to cache")
 

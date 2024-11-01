@@ -3,9 +3,9 @@ import sys
 import numpy as np
 from tqdm import tqdm
 
-from data import measurer, get_dataset, num_sample
-from bandit import MuFasa, UCB1, UCB_ALP, Contextual
-from execute import idx_to_arms, routing
+from simulation.data import measurer, get_dataset, num_sample
+from bandit import MuFasa, UCB1, UCB_ALP, Contextual, SupervisedContextual
+from simulation.execute import idx_to_arms, routing
 from neural_bandit_neuralts import NeuralTS
 from neural_bandit_neuralucb import NeuralUCB
 
@@ -18,6 +18,8 @@ modules = {
     'functionB': 2,
     'functionC': 4,
 }
+
+log_dir = "./simulation/logs"
 
 # Specify the program to be executed
 # program = [("functionA", None), ("functionB", None)]
@@ -42,7 +44,7 @@ def baseline():
         correct = 0
         total_cost = 0
         pbar = tqdm(total=total_len)
-        with open(f"./logs/{exp_name}{arm_idx}_results.txt", "w") as f:
+        with open(f"{log_dir}/{exp_name}{arm_idx}_results.txt", "w") as f:
             for t in range(total_len):
                 context = dataset.step()
                 complexity = measurer.complexity(context)
@@ -53,7 +55,7 @@ def baseline():
                 pbar.update(1)
                 f.write(f"{t}; {complexity}; {exec_result}; {exec_cost}; \n")
         print(f"Arm: {selected_arms}, Accuracy: {correct/total_len}, Average cost: {total_cost/total_len}")
-        with open("./logs/baseline.txt", "a") as f:
+        with open(f"{log_dir}/baseline.txt", "a") as f:
             f.write(f"{selected_arms}; {correct/total_len}; {total_cost/total_len}\n")
 
 # Load the baseline results, if failed, run the baseline
@@ -61,7 +63,7 @@ try:
     baseline_results = {}
     baseline_costs = {}
     for i in range(num_arms):
-        with open(f"./logs/{exp_name}{i}_results.txt", "r") as f:
+        with open(f"{log_dir}/{exp_name}{i}_results.txt", "r") as f:
             lines = f.readlines()
             baseline_results[i] = []
             for line in lines:
@@ -84,14 +86,14 @@ def get_reward(context, program, arm_idx, weight, t):
     '''
     This function calculates the reward for a given arm index, based on the context, program, and cost weighting.
     '''
-    # selected_arms = idx_to_arms(arm_idx, modules)
+    # selected_arms = idx_to_arms(arm_idx, program, modules)
     # exec_result, exec_cost = routing(context, program, selected_arms)
     exec_result = baseline_results[arm_idx][t]
     exec_cost = baseline_costs[arm_idx]
     return exec_result, exec_cost, - (pseudo_loss(exec_result, 1) + weight * exec_cost) * 100
         
 
-def oracle(cost_weighting_list, save_dir="./logs/"):
+def oracle(cost_weighting_list, save_dir):
     '''
     This function runs the oracle experiment, where the optimal arm is selected based on the true reward.
     '''
@@ -131,7 +133,7 @@ def oracle(cost_weighting_list, save_dir="./logs/"):
         print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
 
 
-def ucb1(cost_weighting_list, save_dir="./logs/", arg_nu=1):
+def ucb1(cost_weighting_list, save_dir, arg_nu=1):
     '''
     This function runs the UCB1 experiment, where the arm is selected based on the UCB1 algorithm.
     '''
@@ -184,7 +186,7 @@ def ucb1(cost_weighting_list, save_dir="./logs/", arg_nu=1):
         print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
 
 
-def contextual(cost_weighting_list, save_dir="./logs/"):
+def contextual(cost_weighting_list, save_dir):
     '''
     This function runs the contextual bandit experiment, where the arm is selected based on the Contextual Bandit algorithm.
     '''
@@ -192,6 +194,7 @@ def contextual(cost_weighting_list, save_dir="./logs/"):
     arg_lambda = 0.0001 # Regularization parameter
     arg_nu = 0.1 # Exploration-exploitation trade-off parameter
     arg_hidden_size = 128 # Hidden size of the neural network
+    
 
     for arg_cost_weighting in cost_weighting_list:
         print("Cost weighting: ", arg_cost_weighting)
@@ -200,8 +203,7 @@ def contextual(cost_weighting_list, save_dir="./logs/"):
         dataset = get_dataset()
         input_size = 384
         
-        # algo = NeuralUCB(input_size, num_arms, beta=1, lamb=1)
-        algo = Contextual(modules, input_size, arg_lambda, arg_nu, arg_hidden_size)
+        algo = Contextual(num_arms, baseline_costs, arg_cost_weighting, input_size, arg_lambda, arg_nu, arg_hidden_size)
         # algo = MuFasa(modules, input_size, arg_lambda, arg_nu, arg_hidden_size)
 
         gathered_reward = []
@@ -213,10 +215,8 @@ def contextual(cost_weighting_list, save_dir="./logs/"):
         f = open(os.path.join(save_dir, np.format_float_positional(arg_cost_weighting) + ".txt"), "w", buffering=1)
         for t in range(total_len):
             context = dataset.step()
-            # context_complexiy = measurer.complexity(context)
             input_feature = np.array(context)
             
-            # arm_idx = algo.take_action(input_feature)
             arm_idx, _, _ = algo.select(input_feature, t) 
 
             if arm_idx is None:
@@ -263,7 +263,68 @@ def contextual(cost_weighting_list, save_dir="./logs/"):
         print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
 
 
-def neural(cost_weighting_list, save_dir="./logs/"):
+def supervised(cost_weighting_list, save_dir):
+    '''
+    This function runs the supervised learning experiment, where the arm selection is trained using the first 50% of the dataset and tested on the second 50%.
+    '''
+    # hyperparameters
+    arg_hidden_size = 128 # Hidden size of the neural network
+
+    for arg_cost_weighting in cost_weighting_list:
+        print("Cost weighting: ", arg_cost_weighting)
+        set_seed(7)
+        dataset = get_dataset()
+        
+        input_size = 384
+        algo = SupervisedContextual(num_arms, input_size, arg_hidden_size)
+
+        contexts = []
+        arm_idxs = []
+        rewards = []
+        for t in range(total_len//2):
+            context = dataset.step()
+            input_feature = np.array(context)
+            for idx in range(num_arms):
+                contexts.append(input_feature)
+                arm_idxs.append(idx)
+                _, _, reward = get_reward(context, program, idx, arg_cost_weighting, t)
+                rewards.append(reward)
+        algo.train(contexts, arm_idxs, rewards, num_epochs=20)
+        
+        gathered_reward = []
+        total_correct = 0
+        total_cost = 0
+        log = []
+
+        pbar = tqdm(total=total_len//2)
+        
+        for t in range(total_len//2, total_len):
+            context = dataset.step()
+            input_feature = np.array(context)
+            arm_idx = algo.select(input_feature)
+            selected_arms = idx_to_arms(arm_idx, program, modules)
+            exec_result, exec_cost, final_reward = get_reward(context, program, arm_idx, arg_cost_weighting, t)
+            gathered_reward.append(final_reward)
+            total_correct += exec_result
+            total_cost += exec_cost
+
+            avg_accuracy, avg_cost = total_correct/(t+1), total_cost/(t+1)
+            log.append([t, 0, measurer.complexity(context), selected_arms, exec_result, exec_cost, avg_accuracy, avg_cost, sum(gathered_reward)/len(gathered_reward)])
+            pbar.set_description("Accuracy: {:.3f}, Average cost: {:.3f}".format(avg_accuracy, avg_cost))
+            pbar.update(1)
+
+        pbar.close()
+        print("Accuracy: ", total_correct/len(dataset))
+        print("Average cost: ", total_cost/len(dataset))
+        with open(os.path.join(save_dir, np.format_float_positional(arg_cost_weighting) + ".txt"), "w") as f:
+            for l in log:
+                f.write(", ".join([str(i) for i in l]) + "\n")
+        
+        print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
+
+
+
+def neural(cost_weighting_list, save_dir):
     '''
     This function runs the neural bandit experiment, where the arm is selected based on the neural_bandit implementation at https://github.com/wadx2019/Neural-Bandit
     '''
@@ -347,28 +408,34 @@ if __name__ == "__main__":
     cost_weighting_list += [0.0005, 0.0006, 0.0007, 0.0008, 0.0009]
     
     # Test the oracle
-    # save_dir = f"./logs/{exp_name}oracle/"
+    # save_dir = f"{log_dir}/{exp_name}oracle/"
     # if not os.path.exists(save_dir):
     #     os.makedirs(save_dir, exist_ok=True)
     # oracle(cost_weighting_list, save_dir)
 
     # Test the UCB1
-    # save_dir = "./logs/{exp_name}ucb1/"
+    # save_dir = "{log_dir}/{exp_name}ucb1/"
     # if not os.path.exists(save_dir):
     #     os.makedirs(save_dir, exist_ok=True)
     # ucb1(cost_weighting_list, save_dir, 0.5)
 
     # Test the contextual bandit
-    # save_dir = f"./logs/{exp_name}contextual/"
+    # save_dir = f"{log_dir}/{exp_name}contextual/"
     # if not os.path.exists(save_dir):
     #     os.makedirs(save_dir, exist_ok=True)
     # contextual(cost_weighting_list, save_dir)
 
-    # Test the neural bandit
-    save_dir = f"./logs/{exp_name}neural/"
+    save_dir = f"{log_dir}/{exp_name}supervised/"
     if not os.path.exists(save_dir):
         os.makedirs(save_dir, exist_ok=True)
-    neural(cost_weighting_list, save_dir)
+    supervised(cost_weighting_list, save_dir)
+
+
+    # Test the neural bandit
+    # save_dir = f"{log_dir}/{exp_name}neural/"
+    # if not os.path.exists(save_dir):
+    #     os.makedirs(save_dir, exist_ok=True)
+    # neural(cost_weighting_list, save_dir)
 
     # Test the baseline
     # baseline()

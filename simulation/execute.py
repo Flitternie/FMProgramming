@@ -1,4 +1,4 @@
-from model import *
+from simulation.model import *
 
 '''
 This file contains the code to execute the program and route it to the specific arms.

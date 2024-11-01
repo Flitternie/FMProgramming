@@ -1,5 +1,5 @@
 import numpy as np
-from data import measurer, get_dataset, num_sample
+from simulation.data import measurer, get_dataset, num_sample
 import random
 
 '''
@@ -82,28 +82,32 @@ def model_b2(input):
 
 def model_c1(input):
     complexity = measurer.complexity(input[0])
-    result = decay_function(complexity, type='logistic', k=10, x0=0.5, ymin=0.1, ymax=1)[0]
+    result = decay_function(complexity, type='logistic', k=7, x0=0.5, ymin=0.1, ymax=0.7, noise=0.01)[0]
+    result = 1 if result > 0.5 else 0
     if isinstance(input[-1], float):
         return result * input[-1]
     return result
 
 def model_c2(input):
     complexity = measurer.complexity(input[0])
-    result = decay_function(complexity, type='logistic', k=15, x0=0.4, ymin=0.3, ymax=1)[0]
+    result = decay_function(complexity, type='logistic', k=10, x0=0.4, ymin=0.3, ymax=1, noise=0.01)[0]
+    result = 1 if result > 0.5 else 0
     if isinstance(input[-1], float):
         return result * input[-1]
     return result
 
 def model_c3(input):
     complexity = measurer.complexity(input[0])
-    result = decay_function(complexity, type='exponential', k=2.5, ymin=0.1, ymax=1)[0]
+    result = decay_function(complexity, type='exponential', k=5, ymin=0.1, ymax=0.8, noise=0.01)[0]
+    result = 1 if result > 0.5 else 0   
     if isinstance(input[-1], float):
         return result * input[-1]
     return result
 
 def model_c4(input):
     complexity = measurer.complexity(input[0])
-    result = decay_function(complexity, type='exponential', k=15, ymin=0.3, ymax=1, noise=0.001)[0]
+    result = decay_function(complexity, type='exponential', k=10, ymin=0.3, ymax=1, noise=0.01)[0]
+    result = 1 if result > 0.5 else 0
     if isinstance(input[-1], float):
         return result * input[-1]
     return result
