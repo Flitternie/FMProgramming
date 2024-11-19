@@ -378,11 +378,11 @@ class BLIPModel(BaseModel):
         return response
 
 
-clip_model = CLIPModel()
-def clip(image, text, task='score', negative_categories=None):
-    print("CLIP")
-    return clip_model.forward(image, text, task=task, negative_categories=negative_categories)
-print("CLIP model loaded")
+# clip_model = CLIPModel()
+# def clip(image, text, task='score', negative_categories=None):
+#     print("CLIP")
+#     return clip_model.forward(image, text, task=task, negative_categories=negative_categories)
+# print("CLIP model loaded")
 
 # glip_model_small = GLIPModel(size=0, gpu_number=0)
 # glip_model_large = GLIPModel(size=1, gpu_number=0)
@@ -405,44 +405,37 @@ print("CLIP model loaded")
 #         print("BLIP large")
 #         return blip_model_large.forward(image, text, task=task)
 # print("BLIP model loaded")
-object_detection_models = ObjectDetection("cuda:0")
-vqa_models = VisualQuestionAnswering("cuda:1")
+
 
 # tcl_model = TCLModel()
-tcl_model = BaseModel()
-def tcl(image, texts, task='score'):
-    print("TCL")
-    return None
+# def tcl(image, texts, task='score'):
     # return tcl_model.forward(image, texts, task=task)
-print("TCL model loaded")
+# print("TCL model loaded")
 
 # xvlm_model = XVLMModel()
-xvlm_model = BaseModel()
-def xvlm(image, text, task='score', negative_categories=None):
-    print("XVLM")
-    return None
+# def xvlm(image, text, task='score', negative_categories=None):
     # return xvlm_model.forward(image, text, task=task, negative_categories=negative_categories)
-print("XVLM model loaded")
+# print("XVLM model loaded")
 
 # maskrcnn_model = MaskRCNNModel()
-maskrcnn_model = BaseModel()
-def maskrcnn(image):
-    print("MaskRCNN")
-    return None
+# def maskrcnn(image):
     # return maskrcnn_model.forward(image)
-print("MaskRCNN model loaded")
+# print("MaskRCNN model loaded")
 
 # depth_model = DepthEstimationModel()
-def depth(image):
-    return None
-    # return depth_model.forward(image)
 # print("Depth model loaded")
 
+object_detection_models = ObjectDetection("cuda:0")
+vqa_models = VisualQuestionAnswering("cuda:1")
 
 def object_detection(image, object_name, routing=None):
     return object_detection_models.forward(image, object_name, routing)
 
+def vqa(image, text, routing=None):
+    return vqa_models.forward(image, text, routing)
+
 def image_text_matching(image, category, negative_categories=None, routing=None):
+    raise NotImplementedError
     model = 'clip'
     if model == 'clip':
         res = clip(image, category, task='score', negative_categories=negative_categories)
@@ -455,6 +448,7 @@ def image_text_matching(image, category, negative_categories=None, routing=None)
     return res
 
 def image_text_classify(image, text, routing=None):
+    raise NotImplementedError
     model = 'clip'
     if model == 'clip':
         selected = clip(image, text, task='classify')
@@ -467,6 +461,7 @@ def image_text_classify(image, text, routing=None):
     return selected
 
 def batched_image_text_matching(images, content, negative_categories=None, routing=None):
+    raise NotImplementedError
     scores = []
     model = 'clip'
     for cont in content:
@@ -479,10 +474,8 @@ def batched_image_text_matching(images, content, negative_categories=None, routi
     scores = scores.argmax().item()  # Argmax over all image patches
     return scores
 
-def vqa(image, text, routing=None):
-    # return blip(image, text, task='qa', routing=routing)
-    return vqa_models.forward(image, text, routing)
-
 def llm(model, prompt, routing=None):
-    raise NotImplementedError("LLM is not implemented in the base models")
-    
+    raise NotImplementedError
+
+def depth(image):
+    raise NotImplementedError

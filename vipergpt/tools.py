@@ -4,11 +4,7 @@ import torchvision.transforms as transforms
 from agentlego.apis import load_tool
 
 class ObjectDetection():
-    def __init__(self, device):
-        import nltk
-        nltk.download('punkt', download_dir='~/nltk_data')
-        nltk.download('averaged_perceptron_tagger', download_dir='~/nltk_data')
-        
+    def __init__(self, device):        
         self.device = device
         self.image_processor = transforms.ToPILImage()
         self.model_pool = [
@@ -62,7 +58,6 @@ class VisualQuestionAnswering():
         self.model_pool = [
             ("ofa-base_3rdparty-zeroshot_vqa", 0),
             ("blip2-opt2.7b_3rdparty-zeroshot_vqa", 1),
-            ("llava-7b-v1.5_vqa", 2) 
         ]
         self.image_processor = transforms.ToPILImage()
         self.initialize()

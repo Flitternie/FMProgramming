@@ -5,15 +5,16 @@ import torch.nn as nn
 import tqdm
 from scipy.optimize import linprog
 from itertools import product
-from network import ModuleNetwork, AggregateNetwork
+from network import ModuleNetwork, AggregateNetwork, CNN
 from torch.utils.data import DataLoader, TensorDataset
+from torch.distributions import Normal
 
 '''
 This file contains the implementation of the following bandit algorithms:
 1. Multi-facet Contextual Bandits (MuFasa)
 2. Upper Confidence Bound (UCB1)
 3. UCB with Linear Programming (UCB_ALP)
-4. Contextual Bandits (Contextual)
+4. Contextual Bandits (ContextualBandit)
 '''
 
 # Check if CUDA (GPU) is available and set the device accordingly
@@ -109,11 +110,8 @@ class MuFasa:
 
 # Classical UCB algorithm
 class UCB1:
-    def __init__(self, modules, alpha=1):
-        n_arms = 1
-        for _, num_arms in modules.items():
-            n_arms *= num_arms
-        self.num_arms = n_arms
+    def __init__(self, num_arms, alpha=1):
+        self.num_arms = num_arms
         self.counts = np.zeros(self.num_arms)  # Number of times each arm was pulled
         self.values = np.zeros(self.num_arms)  # Average reward for each arm
         self.alpha = alpha  # Exploration hyperparameter
@@ -204,68 +202,67 @@ class UCB_ALP:
         self.horizon -= 1 
 
 
-# Contextual UCB algorithm
-class Contextual:
-    def __init__(self, num_arms, arm_costs, cost_weighting, input_size, lambd=1, nu=0.1, hidden_size=512):
-        # Initialize the network
-        self.input_size = input_size  # Dimension of input context
+class ContextualBandit:
+    def __init__(self, num_arms, arm_costs, cost_weighting, lambd=1, nu=0.1):
         self.num_arms = num_arms
         self.arm_costs = arm_costs
         self.cost_weighting = cost_weighting
-        self.hidden_size = hidden_size
+        self.model = CNN(num_arms).to(device)
         self.lambd = lambd
         self.nu = nu
+        self.lr = 0.001
 
         # Arm embeddings
-        self.arm_embeddings = torch.nn.Embedding(self.num_arms, self.hidden_size).to(device)
+        # self.arm_embeddings = nn.Embedding(self.num_arms, self.model.feature_hidden_size).to(next(self.model.parameters()).device)
         
-        # Context transformation
-        self.context_transform = torch.nn.Linear(self.input_size, self.hidden_size).to(device)
-        self.activation = torch.nn.ReLU().to(device)
-        
-        total_params = sum(p.numel() for p in self.arm_embeddings.parameters() if p.requires_grad)
-        total_params += sum(p.numel() for p in self.context_transform.parameters() if p.requires_grad)
-        self.U = lambd * torch.ones((total_params,)).to(device)
-        
+        total_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        # total_params = sum(p.numel() for p in self.arm_embeddings.parameters() if p.requires_grad)
+        self.U = lambd * torch.ones((total_params,)).to(next(self.model.parameters()).device)
+
+        self.optimizer = optim.AdamW(list(self.model.parameters()), lr=self.lr)
+        self._initialize_cache()
+
+    
+    def _initialize_cache(self):
         # Storage for learning
         self.context_list = []
         self.arm_list = []
         self.reward_list = []
-        
+    
     def select(self, context, t):
-        # Convert context to tensors
-        input = torch.tensor(context).float().to(device)
-        transformed_context = self.context_transform(input)
-        transformed_context = self.activation(transformed_context)
+        # Convert context to tensors and get transformed context from model
+        context_tensor = torch.tensor(context).float().to(next(self.model.parameters()).device)
+        model_outputs = self.model(context_tensor)
         
         g_list = []  # Gradients list
         sampled_rewards = []  # Sampled rewards
         true_rewards = []  # True rewards
         
-        # Compute the sigma and sampled reward for each arm combination
+        # Compute the sigma and sampled reward for each arm combination using gradient-based Thompson Sampling
         for arm_index in range(self.num_arms):
-            arm_embedding = self.arm_embeddings(torch.tensor([arm_index]).to(device))
-            reward_prediction = torch.dot(transformed_context, arm_embedding.flatten())
+            # arm_embedding = self.arm_embeddings(torch.tensor([arm_index]).to(next(self.model.parameters()).device))
+            # reward_prediction = torch.dot(transformed_context.flatten(), arm_embedding.flatten())
+            reward_prediction = model_outputs[arm_index]
 
-            # Calculate gradient for UCB
-            self.arm_embeddings.zero_grad()
-            self.context_transform.zero_grad()
+            # Calculate gradient for Thompson Sampling
+            # self.arm_embeddings.zero_grad()
+            self.model.zero_grad()
             reward_prediction.backward(retain_graph=True)
 
             # Collect gradients
             gradients = torch.cat([p.grad.flatten().detach() for p in 
-                                   list(self.arm_embeddings.parameters()) +
-                                   list(self.context_transform.parameters())])
+                                #    list(self.arm_embeddings.parameters()) +
+                                   list(self.model.parameters())])
             
-            sigma2 = self.lambd * gradients * gradients / self.U
-            sigma = torch.sqrt(torch.sum(sigma2))
-            sampled_r = reward_prediction.item() + self.nu * sigma.item()
+            # Sample from Normal distribution based on gradient norms for Thompson Sampling
+            sigma = torch.sqrt(self.lambd * torch.sum(gradients * gradients / self.U))
+            sampled_r = reward_prediction.item() + Normal(0, self.nu * sigma.item()).sample().item()
             sampled_r = sampled_r - self.arm_costs[arm_index] * self.cost_weighting
             true_rewards.append(reward_prediction.item())
             sampled_rewards.append(sampled_r)
             g_list.append(gradients)
         
-        # Select arm based on UCB
+        # Select arm based on Thompson Sampling
         selected_arm = np.argmax(sampled_rewards)
         self.U += g_list[selected_arm] * g_list[selected_arm]
         return selected_arm, sampled_rewards, true_rewards
@@ -276,12 +273,8 @@ class Contextual:
         self.arm_list.append(arm_idx)
         self.reward_list.append(final_r)
     
-    def train(self, num_epochs=5, batch_size=16, lr=0.0003):
+    def train(self, num_epochs=5, batch_size=8):
         # Train the network on observed data
-        optimizer = optim.SGD(list(self.arm_embeddings.parameters()) + 
-                              list(self.context_transform.parameters()), 
-                              lr=lr)
-        
         index = np.arange(len(self.reward_list))
         context_list = self.context_list
         arm_list = self.arm_list
@@ -289,66 +282,49 @@ class Contextual:
     
         np.random.shuffle(index)
         length = len(reward_list)
+        
+        if length == 0:
+            return 0.0  # No data to train on
+        
+        num_batches = max(1, length // batch_size)
         total_loss = 0
         
-        if length < batch_size:
-            # Process the entire dataset in a single batch
-            optimizer.zero_grad()
-            batch_loss = 0
-            
-            for i in range(length):
-                idx = index[i]
-                context = context_list[idx]
-                context = torch.from_numpy(context).float().to(device)
-                transformed_context = self.context_transform(context)
-                r = reward_list[idx]
-                arm = arm_list[idx]
-    
-                arm_embedding = self.arm_embeddings(torch.tensor([arm]).to(device))
-                predicted_reward = torch.dot(transformed_context, arm_embedding.flatten())
-                predicted_reward = predicted_reward - self.arm_costs[arm] * self.cost_weighting
+        for epoch in range(num_epochs):
+            np.random.shuffle(index)
+            for batch_idx in range(num_batches):
+                batch_loss = 0
+                self.optimizer.zero_grad()
+                
+                # Process each item in the batch
+                for i in range(batch_size):
+                    idx = index[min(batch_idx * batch_size + i, length - 1)]
+                    context = context_list[idx]
+                    context = torch.from_numpy(context).float().to(next(self.model.parameters()).device)
+                    model_outputs = self.model(context)
+                    r = reward_list[idx]
+                    arm = arm_list[idx]
+        
+                    # arm_embedding = self.arm_embeddings(torch.tensor([arm]).to(next(self.model.parameters()).device))
+                    # predicted_reward = torch.dot(transformed_context.flatten(), arm_embedding.flatten())
+                    predicted_reward = model_outputs[arm]
+                    
+                    predicted_reward = predicted_reward - self.arm_costs[arm] * self.cost_weighting
 
-                # MSE loss for reward prediction
-                loss = (predicted_reward - r) ** 2
-                batch_loss += loss
-            
-            batch_loss /= length
-            batch_loss.backward()
-            optimizer.step()
-            total_loss = batch_loss.item()
-            average_loss = total_loss
-        else:
-            num_batches = min(batch_size, length // batch_size)
-            for epoch in range(num_epochs):
-                for batch_idx in range(num_batches):
-                    batch_loss = 0
-                    optimizer.zero_grad()
-                    
-                    for i in range(batch_size):
-                        idx = index[batch_idx * batch_size + i]
-                        context = context_list[idx]
-                        context = torch.from_numpy(context).float().to(device)
-                        transformed_context = self.context_transform(context)
-                        r = reward_list[idx]
-                        arm = arm_list[idx]
+                    # MSE loss for reward prediction
+                    loss = (predicted_reward - r) ** 2
+                    batch_loss += loss
+                
+                # Average batch loss
+                batch_loss /= batch_size
+                batch_loss.backward()
+                self.optimizer.step()
+                total_loss += batch_loss.item()
         
-                        arm_embedding = self.arm_embeddings(torch.tensor([arm]).to(device))
-                        predicted_reward = torch.dot(transformed_context, arm_embedding.flatten())
-                        predicted_reward = predicted_reward - self.arm_costs[arm] * self.cost_weighting
-                        
-                        loss = (predicted_reward - r) ** 2
-                        batch_loss += loss
-                    
-                    batch_loss /= batch_size
-                    batch_loss.backward()
-                    optimizer.step()
-                    total_loss += batch_loss.item()
-            
-            average_loss = total_loss / (num_batches * num_epochs)
-        
+        average_loss = total_loss / (num_batches * num_epochs)
+        self._initialize_cache()
         return average_loss
-
-
+    
+    
 class SupervisedContextual:
     def __init__(self, num_arms, input_size, hidden_size=512, device='cpu'):
         # Initialize the network
@@ -358,7 +334,7 @@ class SupervisedContextual:
         self.device = device
 
         # Arm embeddings
-        self.arm_embeddings = nn.Embedding(self.num_arms, self.hidden_size).to(self.device)
+        # self.arm_embeddings = nn.Embedding(self.num_arms, self.hidden_size).to(self.device)
         
         # Context transformation
         self.context_transform = nn.Linear(self.input_size, self.hidden_size).to(self.device)

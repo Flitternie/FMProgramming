@@ -6,6 +6,7 @@ __pycache__/
 
 # Custom data files
 ~/
+data/
 misc/
 logs/
 COLA/

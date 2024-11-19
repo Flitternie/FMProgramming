@@ -1,10 +1,45 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 '''
-This file contains the neural network classes for the bandit modules and the aggregation network, which are used in the MuFasa algorithm, 
-see the paper "Multi-facet Contextual Bandits: A Neural Network Perspective", original code at https://github.com/banyikun/KDD2021_MuFasa 
+This file contains the neural network classes for the bandit modules and the aggregation network. 
 '''
+class MLP(nn.Module):
+    def __init__(self, input_size, hidden_size=512):
+        super(MLP, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+
+        # Context transformation
+        self.context_transform = nn.Linear(self.input_size, self.hidden_size)
+        self.activation = nn.ReLU()
+
+    def forward(self, context):
+        transformed_context = self.context_transform(context)
+        transformed_context = self.activation(transformed_context)
+        return transformed_context
+
+class CNN(nn.Module):
+    def __init__(self, num_classes):
+        super(CNN, self).__init__()
+        self.feature_hidden_size = 256
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
+        self.fc1 = nn.Linear(128 * 32 * 32, 256)  # Adjusted to match new feature map size
+        self.fc2 = nn.Linear(256, num_classes)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = self.pool(F.relu(self.conv3(x)))
+        x = x.view(-1)  # Flatten the feature maps
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
 
 class ModuleNetwork(nn.Module):
     '''

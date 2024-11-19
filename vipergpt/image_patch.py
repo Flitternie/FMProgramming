@@ -116,7 +116,7 @@ class ImagePatch:
         else:
             return self.parent_img_patch.original_image
 
-    def find(self, object_name: str, routing: int = 0) -> list[ImagePatch]:
+    def find(self, object_name: str, routing: int) -> list[ImagePatch]:
         """Returns a list of ImagePatch objects matching object_name contained in the crop if any are found.
         Otherwise, returns an empty list.
         Parameters
@@ -150,7 +150,7 @@ class ImagePatch:
                 pass
         return cropped_images
 
-    def exists(self, object_name: str, routing: int = 0) -> bool:
+    def exists(self, object_name: str, routing: int) -> bool:
         """Returns True if the object specified by object_name is found in the image, and False otherwise.
         Parameters
         -------
@@ -167,17 +167,17 @@ class ImagePatch:
         patches = self.find(object_name, routing=routing)
         return len(patches) > 0
 
-    def _score(self, category: str, negative_categories=None, routing=0) -> float:
+    def _score(self, category: str, negative_categories: list, routing: int) -> float:
         """
         Returns a binary score for the similarity between the image and the category.
         The negative categories are used to compare to (score is relative to the scores of the negative categories).
         """
         return image_text_matching(self.cropped_image, category, negative_categories=negative_categories, routing=routing)
 
-    def _detect(self, category: str, thresh, negative_categories=None, routing=0) -> bool:
+    def _detect(self, category: str, thresh, negative_categories: list, routing: int) -> bool:
         return self._score(category, negative_categories, routing) > thresh
 
-    def verify_property(self, object_name: str, attribute: str, routing: int = 0) -> bool:
+    def verify_property(self, object_name: str, attribute: str, routing: int) -> bool:
         """Returns True if the object possesses the property, and False otherwise.
         Differs from 'exists' in that it presupposes the existence of the object specified by object_name, instead
         checking whether the object possesses the property.
@@ -201,7 +201,7 @@ class ImagePatch:
         #     return self._detect(name, thresh=config.verify_property.thresh_xvlm, 
         #                         negative_categories=negative_categories, model='xvlm')
 
-    def best_text_match(self, option_list: list[str] = None, prefix: str = None, routing: int = 0) -> str:
+    def best_text_match(self, option_list: list[str], prefix: str, routing: int) -> str:
         """Returns the string that best matches the image.
         Parameters
         -------
@@ -220,7 +220,7 @@ class ImagePatch:
         selected = image_text_classify(image, text, model_name)
         return option_list[selected]
 
-    def simple_query(self, question: str, routing: int = 0) -> str:
+    def simple_query(self, question: str, routing: int) -> str:
         """Returns the answer to a basic question asked about the image. If no question is provided, returns the answer
         to "What is this?". The questions are about basic perception, and are not meant to be used for complex reasoning
         or external knowledge.
@@ -231,7 +231,7 @@ class ImagePatch:
         """
         return vqa(self.cropped_image, question, routing)
 
-    def compute_depth(self, routing: int = 0) -> float:
+    def compute_depth(self, routing: int) -> float:
         """Returns the median depth of the image crop
         Parameters
         ----------
@@ -300,7 +300,7 @@ class ImagePatch:
         """
         return self.left <= right and self.right >= left and self.lower <= upper and self.upper >= lower
 
-    def llm_query(self, question: str, routing: int = 0) -> str:
+    def llm_query(self, question: str, routing: int) -> str:
         return llm_query(question, None)
 
     def print_image(self, size: tuple[int, int] = None):
