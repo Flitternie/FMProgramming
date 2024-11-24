@@ -7,13 +7,14 @@ from torch.distributions import Normal
 from neural_bandit_alg import *
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+dtype_cuda = torch.bfloat16
 
 class Model(nn.Module):
 
     def __init__(self, input_size, hidden_size, out_size):
         super().__init__()
-        self.affine1 = nn.Linear(input_size, hidden_size)
-        self.affine2 = nn.Linear(hidden_size, out_size)
+        self.affine1 = nn.Linear(input_size, hidden_size, dtype=dtype_cuda)
+        self.affine2 = nn.Linear(hidden_size, out_size, dtype=dtype_cuda)
 
     def forward(self, x):
         x = F.relu(self.affine1(x))
@@ -54,8 +55,7 @@ class NeuralTS(RandomAlg):
         self.numel = sum(w.numel() for w in self.net.parameters() if w.requires_grad)
 
         # Initialize sigma_inv as a PyTorch tensor on the GPU
-        self.sigma_inv = lamb * torch.eye(self.numel, dtype=torch.float32, device=self.device)
-
+        self.sigma_inv = lamb * torch.eye(self.numel, dtype=dtype_cuda, device=self.device)
         # Ensure theta0 is on the correct device
         self.theta0 = torch.cat(
             [w.flatten() for w in self.net.parameters() if w.requires_grad]
@@ -65,11 +65,11 @@ class NeuralTS(RandomAlg):
 
     def take_action(self, context):
         # Move context tensor directly to the device
-        context = torch.tensor(context, dtype=torch.float32, device=self.device)
+        context = torch.tensor(context, dtype=dtype_cuda, device=self.device)
         context = context.unsqueeze(0).expand(self.K, -1)
 
         # Initialize g as a tensor on the device
-        g = torch.zeros((self.K, self.numel), dtype=torch.float32, device=self.device)
+        g = torch.zeros((self.K, self.numel), dtype=dtype_cuda, device=self.device)
 
         # Compute gradients for each action
         for k in range(self.K):
@@ -111,7 +111,7 @@ class NeuralTS(RandomAlg):
 
     def update(self, context, action, reward):
         # Move context tensor directly to the device
-        context = torch.tensor(context, dtype=torch.float32, device=self.device)
+        context = torch.tensor(context, dtype=dtype_cuda, device=self.device)
         context = context.unsqueeze(0).expand(self.K, -1)
 
         # Compute the gradient for the selected action
@@ -121,12 +121,12 @@ class NeuralTS(RandomAlg):
         self.sherman_morrison_update(v)
 
         # Add experience to replay buffer (convert to CPU if necessary)
-        self.replay_buffer.add(context[action].cpu().numpy(), reward)
+        self.replay_buffer.add(context[action].cpu().to(torch.float32).numpy(), reward)
 
         self.T += 1
         self.train()
 
-    def sherman_morrison_update(self, v):
+    def sherman_morrison_update(self, v :torch.Tensor):
         # Ensure v is a column vector
         if v.dim() == 1:
             v = v.unsqueeze(1)
@@ -146,8 +146,8 @@ class NeuralTS(RandomAlg):
         if self.T > self.K and self.T % 1 == 0:
             for _ in range(2):
                 x, y = self.replay_buffer.sample(64)
-                x = torch.tensor(x, dtype=torch.float32, device=self.device)
-                y = torch.tensor(y, dtype=torch.float32, device=self.device).view(-1, 1)
+                x = torch.tensor(x, dtype=dtype_cuda, device=self.device)
+                y = torch.tensor(y, dtype=dtype_cuda, device=self.device).view(-1, 1)
 
                 y_hat = self.net(x)
                 loss = F.mse_loss(y_hat, y)

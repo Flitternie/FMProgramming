@@ -67,7 +67,7 @@ def model_b1(input):
     # Accuracy:  0.7092067980551909
     result = decay_function(complexity, type='exponential', k=2, ymin=0.1, ymax=1)[0]
     if isinstance(input[-1], float):
-        return result * input[-1]
+        return result * input[-1] # ??? investigate error propogation
     return result
 
 def model_b2(input):

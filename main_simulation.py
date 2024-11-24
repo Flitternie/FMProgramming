@@ -7,13 +7,40 @@ from simulation.data import measurer, get_dataset, num_sample
 from bandit import MuFasa, UCB1, UCB_ALP, Contextual, SupervisedContextual
 from simulation.execute import idx_to_arms, routing
 from neural_bandit_neuralts import NeuralTS
-from neural_bandit_neuralucb import NeuralUCB
+# from neural_bandit_neuralucb import NeuralUCB
+
+import gc
 
 from utils import *
 
-total_len = num_sample
 
-modules = {
+# For testing, makes sure cuda is functioning reasonably
+import torch # It already will be, but wtv
+if torch.cuda.is_available(): 
+    print("Cuda available on device:", torch.cuda.current_device())
+    print(torch.cuda.get_device_name(torch.cuda.current_device()))
+else:
+    print("cuda unavailable")
+torch.cuda.empty_cache()
+
+# Supposedly, these make the simulation less likely to use memory
+torch.backends.cuda.enable_flash_sdp(True)
+torch.backends.cuda.enable_mem_efficient_sdp(True)
+
+# Check current data usage, should be very low
+print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
+print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
+print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
+
+
+
+# ??? check dependency structure
+# Just checkout a new branch
+# TODO Complex --> cont band (onlinify) + Thompson (try UCB, other exploration algos), !!! by tuesday
+# TODO: work with multiple functions, online, !!! RL loss, Also check out "REINFORCE", also look at vipergpt
+
+total_len = num_sample
+modules = { 
     'functionA': 3,
     'functionB': 2,
     'functionC': 4,
@@ -90,7 +117,9 @@ def get_reward(context, program, arm_idx, weight, t):
     # exec_result, exec_cost = routing(context, program, selected_arms)
     exec_result = baseline_results[arm_idx][t]
     exec_cost = baseline_costs[arm_idx]
-    return exec_result, exec_cost, - (pseudo_loss(exec_result, 1) + weight * exec_cost) * 100
+    reward = - (pseudo_loss(exec_result, 1) + weight * exec_cost) * 100
+    # print(arm_idx, weight, exec_result, exec_cost, pseudo_loss(exec_result, 1), weight*exec_cost, reward) # !!!
+    return exec_result, exec_cost, reward
         
 
 def oracle(cost_weighting_list, save_dir):
@@ -298,6 +327,7 @@ def supervised(cost_weighting_list, save_dir):
 
         pbar = tqdm(total=total_len//2)
         
+        i = 0 # Watch for the divide by twice-as-much inaccuracy
         for t in range(total_len//2, total_len):
             context = dataset.step()
             input_feature = np.array(context)
@@ -308,22 +338,23 @@ def supervised(cost_weighting_list, save_dir):
             total_correct += exec_result
             total_cost += exec_cost
 
-            avg_accuracy, avg_cost = total_correct/(t+1), total_cost/(t+1)
+            avg_accuracy, avg_cost = total_correct/(i+1), total_cost/(i+1)
             log.append([t, 0, measurer.complexity(context), selected_arms, exec_result, exec_cost, avg_accuracy, avg_cost, sum(gathered_reward)/len(gathered_reward)])
             pbar.set_description("Accuracy: {:.3f}, Average cost: {:.3f}".format(avg_accuracy, avg_cost))
             pbar.update(1)
+            i += 1
 
         pbar.close()
-        print("Accuracy: ", total_correct/len(dataset))
-        print("Average cost: ", total_cost/len(dataset))
+        print("Accuracy: ", total_correct/i)
+        print("Average cost: ", total_cost/i)
         with open(os.path.join(save_dir, np.format_float_positional(arg_cost_weighting) + ".txt"), "w") as f:
             for l in log:
-                f.write(", ".join([str(i) for i in l]) + "\n")
+                f.write("; ".join([str(i) for i in l]) + "\n")
         
         print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
 
 
-
+# !!!
 def neural(cost_weighting_list, save_dir):
     '''
     This function runs the neural bandit experiment, where the arm is selected based on the neural_bandit implementation at https://github.com/wadx2019/Neural-Bandit
@@ -376,12 +407,14 @@ def neural(cost_weighting_list, save_dir):
 
             algo.update(context, arm_idx, final_reward)
 
-            
-            if t % 16 == 0:
+            # Actually why do this at all. What is going on here
+            if t % 16 == 0: # ???
                 algo.train()
             
             avg_accuracy, avg_cost = total_correct/(t+1), total_cost/(t+1)
             avg_regret = sum(regrets)/len(regrets)
+
+            # print (f"result: {exec_result}, cost: {exec_cost}, regret: {regret}")
 
             line = "; ".join(str(i) for i in [t, 0, measurer.complexity(context), selected_arms, exec_result, exec_cost, avg_accuracy, avg_cost, sum(gathered_reward)/len(gathered_reward), avg_regret]) + "\n"
             pbar.set_description("Accuracy: {:.3f}, Average cost: {:.3f}, Average regret: {:.3f}".format(avg_accuracy, avg_cost, avg_regret))
@@ -395,6 +428,64 @@ def neural(cost_weighting_list, save_dir):
         
         print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
 
+        torch.cuda.empty_cache()
+        gc.collect()
+
+
+def mufasa(cost_weighting_list, save_dir, arg_nu=1):
+    '''
+    This function runs the UCB1 experiment, where the arm is selected based on the UCB1 algorithm.
+    '''
+    for arg_cost_weighting in cost_weighting_list:
+        print("Cost weighting: ", arg_cost_weighting)
+        
+        set_seed(42)
+        dataset = get_dataset()
+        
+        algo = MuFasa(modules, input_size=dataset.dim, nu=arg_nu)
+
+        gathered_reward = []
+        total_correct = 0
+        total_cost = 0
+        log = []
+
+        total_len = 1000
+        pbar = tqdm(total=total_len)
+        for t in range(total_len):
+            context = dataset.step()
+            arm_idx = algo.select(context, t) # for UCB1 and UCB_ALP
+            if arm_idx is None:
+                raise ValueError("Invalid arm index")
+            selected_arms = idx_to_arms(arm_idx, program, modules)
+            # Execute the program with the selected arms
+            exec_result, exec_cost = routing(context, program, selected_arms)
+            total_correct += int(exec_result)
+            total_cost += exec_cost
+            final_reward = get_reward(context, program, arm_idx, arg_cost_weighting, t)[2]
+            # _, _, reward = get_reward(context, program, idx, arg_cost_weighting, t)
+            gathered_reward.append(final_reward)
+            algo.update(context, final_reward) # for MuFasa
+            # algo.update(arm_idx, final_reward) # for UCB1 and UCB_ALP    
+            
+            if t % 5 == 0:
+                loss = algo.train()
+            loss = 0 # for UCB1 and UCB_ALP
+            
+            avg_accuracy, avg_cost = total_correct/(t+1), total_cost/(t+1)
+            log.append([t, 0, measurer.complexity(context), selected_arms, exec_result, exec_cost, avg_accuracy, avg_cost, sum(gathered_reward)/len(gathered_reward)])
+            pbar.set_description("Accuracy: {:.3f}, Average cost: {:.3f}, {:.5f}".format(avg_accuracy, avg_cost, loss))
+            pbar.update(1)
+
+        pbar.close()
+        print("Accuracy: ", total_correct/len(dataset))
+        print("Average cost: ", total_cost/len(dataset))
+        with open(os.path.join(save_dir, np.format_float_positional(arg_cost_weighting) + ".txt"), "w") as f:
+            for l in log:
+                f.write(", ".join([str(i) for i in l]) + "\n")
+
+        print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
+
+
 
 if __name__ == "__main__":
     # Detect argv for experiment name
@@ -403,9 +494,13 @@ if __name__ == "__main__":
         print("Experiment name: ", exp_name)
 
     # List of cost weightings to test
-    cost_weighting_list = [0.0]
-    cost_weighting_list += [0.0005, 0.001, 0.005, 0.01, 0.05]
-    cost_weighting_list += [0.0005, 0.0006, 0.0007, 0.0008, 0.0009]
+    cost_weighting_list = [0.0, .005, 0.05, 0.1]
+    # cost_weighting_list = [0.0, .0005, .1]
+    # cost_weighting_list = [.001, .002, .003, .004, .005, .006, .007, .008, .009]
+    # cost_weighting_list = [.005, .01, .015, .02, .025, .03, .035, .04, .045, .05, .055, .06, .065, .07, .075, .08, .085, .09, .095]
+    # cost_weighting_list += [0.0005, 0.001, 0.005, 0.01, 0.05]
+    # cost_weighting_list = [0.0001, 0.0002, 0.0003, 0.0004]
+    # cost_weighting_list += [0.0006, 0.0007, 0.0008, 0.0009]
     
     # Test the oracle
     # save_dir = f"{log_dir}/{exp_name}oracle/"
@@ -413,8 +508,14 @@ if __name__ == "__main__":
     #     os.makedirs(save_dir, exist_ok=True)
     # oracle(cost_weighting_list, save_dir)
 
+    # Test the MuFASA
+    save_dir = f"{log_dir}/{exp_name}mufasa/"
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+    mufasa(cost_weighting_list, save_dir)
+
     # Test the UCB1
-    # save_dir = "{log_dir}/{exp_name}ucb1/"
+    # save_dir = f"{log_dir}/{exp_name}ucb1/"
     # if not os.path.exists(save_dir):
     #     os.makedirs(save_dir, exist_ok=True)
     # ucb1(cost_weighting_list, save_dir, 0.5)
@@ -425,10 +526,10 @@ if __name__ == "__main__":
     #     os.makedirs(save_dir, exist_ok=True)
     # contextual(cost_weighting_list, save_dir)
 
-    save_dir = f"{log_dir}/{exp_name}supervised/"
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir, exist_ok=True)
-    supervised(cost_weighting_list, save_dir)
+    # save_dir = f"{log_dir}/{exp_name}supervised/"
+    # if not os.path.exists(save_dir):
+    #     os.makedirs(save_dir, exist_ok=True)
+    # supervised(cost_weighting_list, save_dir)
 
 
     # Test the neural bandit
