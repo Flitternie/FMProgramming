@@ -11,7 +11,7 @@ accs = []
 costs = []
 
 # Change the filename as necessary
-filename = 'simulation/logs/contextual/0.005.txt' 
+filename = 'simulation/logs/testmufasa/0..txt' 
 
 with open(filename, 'r') as file:
   for line in file:

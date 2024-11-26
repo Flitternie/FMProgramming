@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 
 from simulation.data import measurer, get_dataset, num_sample
-from bandit import MuFasa, UCB1, UCB_ALP, Contextual, SupervisedContextual
+from bandit import MuFasa, UCB1, UCB_ALP, ModifiedSupervisedContextual, ContextualBandit
 from simulation.execute import idx_to_arms, routing
 from neural_bandit_neuralts import NeuralTS
 # from neural_bandit_neuralucb import NeuralUCB
@@ -50,7 +50,8 @@ log_dir = "./simulation/logs"
 
 # Specify the program to be executed
 # program = [("functionA", None), ("functionB", None)]
-program = [("functionC", None)]
+# program = [("functionA", None), ("functionC", None)]
+program = [('functionC', None)]
 
 exp_name = ""
 
@@ -64,6 +65,7 @@ def baseline():
     '''
     This function runs the baseline experiment, where the program is executed with all possible combinations of arms.
     '''
+    os.remove(f"{log_dir}/baseline.txt")
     for arm_idx in range(num_arms):
         set_seed(7)
         dataset = get_dataset()
@@ -87,6 +89,12 @@ def baseline():
 
 # Load the baseline results, if failed, run the baseline
 try:
+    # To be clear, this check does not guarantee the correct baseline
+    with open(f"{log_dir}/baseline.txt", 'r') as file:
+        if len(file.readlines()) != num_arms:
+            print(len(file.readlines()), num_arms)
+            print("Match failure -- ")
+            raise RuntimeError("Baseline file lines does not match correct number of modules") # Lazy way to jump to the except
     baseline_results = {}
     baseline_costs = {}
     for i in range(num_arms):
@@ -98,9 +106,18 @@ try:
                 baseline_results[i].append(float(line.split("; ")[2]))
             baseline_costs[i] = float(lines[-1].split("; ")[-2])
 except:
-    print("Baseline results not found, running the baseline")
+    print("Appropriate baseline results not found, running the baseline")
     baseline()
-
+    baseline_results = {}
+    baseline_costs = {}
+    for i in range(num_arms):
+        with open(f"{log_dir}/{exp_name}{i}_results.txt", "r") as f:
+            lines = f.readlines()
+            baseline_results[i] = []
+            for line in lines:
+                line = line.strip()
+                baseline_results[i].append(float(line.split("; ")[2]))
+            baseline_costs[i] = float(lines[-1].split("; ")[-2])
 
 def pseudo_loss(pred, target):
     '''
@@ -118,7 +135,6 @@ def get_reward(context, program, arm_idx, weight, t):
     exec_result = baseline_results[arm_idx][t]
     exec_cost = baseline_costs[arm_idx]
     reward = - (pseudo_loss(exec_result, 1) + weight * exec_cost) * 100
-    # print(arm_idx, weight, exec_result, exec_cost, pseudo_loss(exec_result, 1), weight*exec_cost, reward) # !!!
     return exec_result, exec_cost, reward
         
 
@@ -196,8 +212,8 @@ def ucb1(cost_weighting_list, save_dir, arg_nu=1):
             # algo.update(context, final_reward) # for MuFasa
             algo.update(arm_idx, final_reward) # for UCB1 and UCB_ALP    
             
-            # if t % 5 == 0:
-            #     loss = algo.train()
+            if t % 5 == 0:
+                loss = algo.train()
             loss = 0 # for UCB1 and UCB_ALP
             
             avg_accuracy, avg_cost = total_correct/(t+1), total_cost/(t+1)
@@ -232,7 +248,7 @@ def contextual(cost_weighting_list, save_dir):
         dataset = get_dataset()
         input_size = 384
         
-        algo = Contextual(num_arms, baseline_costs, arg_cost_weighting, input_size, arg_lambda, arg_nu, arg_hidden_size)
+        algo = ContextualBandit(num_arms, baseline_costs, arg_cost_weighting, input_size, arg_lambda, arg_nu, arg_hidden_size)
         # algo = MuFasa(modules, input_size, arg_lambda, arg_nu, arg_hidden_size)
 
         gathered_reward = []
@@ -305,7 +321,7 @@ def supervised(cost_weighting_list, save_dir):
         dataset = get_dataset()
         
         input_size = 384
-        algo = SupervisedContextual(num_arms, input_size, arg_hidden_size)
+        algo = ModifiedSupervisedContextual(num_arms, input_size, arg_hidden_size)
 
         contexts = []
         arm_idxs = []
@@ -327,13 +343,17 @@ def supervised(cost_weighting_list, save_dir):
 
         pbar = tqdm(total=total_len//2)
         
-        i = 0 # Watch for the divide by twice-as-much inaccuracy
+        i = 0 # Watch for the divide by twice-as-much error
         for t in range(total_len//2, total_len):
             context = dataset.step()
             input_feature = np.array(context)
             arm_idx = algo.select(input_feature)
             selected_arms = idx_to_arms(arm_idx, program, modules)
             exec_result, exec_cost, final_reward = get_reward(context, program, arm_idx, arg_cost_weighting, t)
+
+            # Try to apply routing state
+            exec_result, exec_cost = routing(context, program, selected_arms) # !!! Investigate this reward-then-overwrite scheme. I don't like it
+
             gathered_reward.append(final_reward)
             total_correct += exec_result
             total_cost += exec_cost
@@ -354,7 +374,6 @@ def supervised(cost_weighting_list, save_dir):
         print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
 
 
-# !!!
 def neural(cost_weighting_list, save_dir):
     '''
     This function runs the neural bandit experiment, where the arm is selected based on the neural_bandit implementation at https://github.com/wadx2019/Neural-Bandit
@@ -407,8 +426,7 @@ def neural(cost_weighting_list, save_dir):
 
             algo.update(context, arm_idx, final_reward)
 
-            # Actually why do this at all. What is going on here
-            if t % 16 == 0: # ???
+            if t % 16 == 0:
                 algo.train()
             
             avg_accuracy, avg_cost = total_correct/(t+1), total_cost/(t+1)
@@ -432,7 +450,7 @@ def neural(cost_weighting_list, save_dir):
         gc.collect()
 
 
-def mufasa(cost_weighting_list, save_dir, arg_nu=1):
+def mufasa(cost_weighting_list, save_dir, arg_nu=1): # !!!
     '''
     This function runs the UCB1 experiment, where the arm is selected based on the UCB1 algorithm.
     '''
@@ -442,24 +460,34 @@ def mufasa(cost_weighting_list, save_dir, arg_nu=1):
         set_seed(42)
         dataset = get_dataset()
         
-        algo = MuFasa(modules, input_size=dataset.dim, nu=arg_nu)
+        # !!! This expanded model setup is probably not mufasa. Not sure
+        # program_modules = [(prog_name, modules[prog_name]) for prog_name, _ in program]
+
+        # This does not generalize well
+        limited_program_modules = [(prog_name, modules[prog_name]) for prog_name in modules.keys() if (prog_name, None) in program]
+
+        algo = MuFasa(limited_program_modules, input_size=dataset.dim, nu=arg_nu)
 
         gathered_reward = []
         total_correct = 0
         total_cost = 0
         log = []
 
-        total_len = 1000
+        # ??? Reorganize to only include the last 50% in success data?
+        total_len = len(dataset) # //2 previously
         pbar = tqdm(total=total_len)
-        for t in range(total_len):
+        for t in range(total_len): # ??? different format
             context = dataset.step()
-            arm_idx = algo.select(context, t) # for UCB1 and UCB_ALP
+            arm_idx = algo.select(context, t) # for UCB1 and UCB_ALP. And mufasa?
             if arm_idx is None:
                 raise ValueError("Invalid arm index")
             selected_arms = idx_to_arms(arm_idx, program, modules)
+
             # Execute the program with the selected arms
             exec_result, exec_cost = routing(context, program, selected_arms)
-            total_correct += int(exec_result)
+            # total_correct += int(exec_result) # !!! This is a confusing signifier
+            total_correct += exec_result
+
             total_cost += exec_cost
             final_reward = get_reward(context, program, arm_idx, arg_cost_weighting, t)[2]
             # _, _, reward = get_reward(context, program, idx, arg_cost_weighting, t)
@@ -469,7 +497,7 @@ def mufasa(cost_weighting_list, save_dir, arg_nu=1):
             
             if t % 5 == 0:
                 loss = algo.train()
-            loss = 0 # for UCB1 and UCB_ALP
+            # loss = 0 # for UCB1 and UCB_ALP
             
             avg_accuracy, avg_cost = total_correct/(t+1), total_cost/(t+1)
             log.append([t, 0, measurer.complexity(context), selected_arms, exec_result, exec_cost, avg_accuracy, avg_cost, sum(gathered_reward)/len(gathered_reward)])
@@ -477,11 +505,11 @@ def mufasa(cost_weighting_list, save_dir, arg_nu=1):
             pbar.update(1)
 
         pbar.close()
-        print("Accuracy: ", total_correct/len(dataset))
-        print("Average cost: ", total_cost/len(dataset))
+        print("Accuracy: ", total_correct/total_len)
+        print("Average cost: ", total_cost/total_len)
         with open(os.path.join(save_dir, np.format_float_positional(arg_cost_weighting) + ".txt"), "w") as f:
             for l in log:
-                f.write(", ".join([str(i) for i in l]) + "\n")
+                f.write("; ".join([str(i) for i in l]) + "\n")
 
         print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
 
@@ -494,12 +522,14 @@ if __name__ == "__main__":
         print("Experiment name: ", exp_name)
 
     # List of cost weightings to test
-    cost_weighting_list = [0.0, .005, 0.05, 0.1]
-    # cost_weighting_list = [0.0, .0005, .1]
+    cost_weighting_list = []
+    cost_weighting_list += [0.0, .1]
+    # cost_weighting_list += [0.0005, 0.001, 0.005]
+    cost_weighting_list += [0.01, 0.05]
     # cost_weighting_list = [.001, .002, .003, .004, .005, .006, .007, .008, .009]
     # cost_weighting_list = [.005, .01, .015, .02, .025, .03, .035, .04, .045, .05, .055, .06, .065, .07, .075, .08, .085, .09, .095]
-    # cost_weighting_list += [0.0005, 0.001, 0.005, 0.01, 0.05]
-    # cost_weighting_list = [0.0001, 0.0002, 0.0003, 0.0004]
+    # cost_weighting_list += [0.0001, 0.0002, 0.0003, 0.0004]
+    # cost_weighting_list += [.25, .5, 1, 1.5, 2, 3]
     # cost_weighting_list += [0.0006, 0.0007, 0.0008, 0.0009]
     
     # Test the oracle
@@ -531,6 +561,10 @@ if __name__ == "__main__":
     #     os.makedirs(save_dir, exist_ok=True)
     # supervised(cost_weighting_list, save_dir)
 
+    # save_dir = f"{log_dir}/{exp_name}supervised_mufasa/"
+    # if not os.path.exists(save_dir):
+    #     os.makedirs(save_dir, exist_ok=True)
+    # supervised_mufasa(cost_weighting_list, save_dir)
 
     # Test the neural bandit
     # save_dir = f"{log_dir}/{exp_name}neural/"

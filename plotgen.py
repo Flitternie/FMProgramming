@@ -30,7 +30,10 @@ def add_dir_to_plot(directory, color=None, scale=1, splitter='; '):
 # add_dir_to_plot('simulation/logs/expsupervised', 'blue', splitter='; ')
 # add_dir_to_plot('simulation/logs/oldsupervised', 'green', scale=2, splitter=', ')
 # add_dir_to_plot('simulation/logs/500neural', 'green')
-add_dir_to_plot('simulation/logs/contextual', 'blue')
+
+# add_dir_to_plot('simulation/logs/testsupervised', 'blue')
+# add_dir_to_plot('simulation/logs/testmufasa', 'green')
+add_dir_to_plot('simulation/logs/limmufasa', 'purple')
 
 # Baseline Models
 baseline_cost = []
@@ -42,11 +45,26 @@ with open('simulation/logs/baseline.txt', 'r') as baseline:
     baseline_cost.append(float(segments[2]))
     baseline_acc.append(float(segments[1]))
 
-plt.plot(baseline_cost, baseline_acc, c='red', marker='x', linestyle='--')
-plt.plot([baseline_cost[1], baseline_cost[3]], [baseline_acc[1], baseline_acc[3]], c='darkred', marker='', linestyle=':')
+# Plot all points
+plt.scatter(baseline_cost, baseline_acc, c='red', marker='x')
+
+# Plot linear interpolation of baselines
+cost_and_acc = sorted(zip(baseline_cost, baseline_acc))
+
+# Follows best cost at time accuracy
+bests_at_cost = [cost_and_acc[0]]
+for cost, acc in cost_and_acc[1:]:
+  if acc >= bests_at_cost[-1][1]:
+    if cost == bests_at_cost[-1][0]:
+      bests_at_cost.pop(-1)
+    bests_at_cost.append((cost, acc))
+for i in range(len(bests_at_cost) - 1):
+  plt.plot([bests_at_cost[i][0], bests_at_cost[i+1][0]], [bests_at_cost[i][1], bests_at_cost[i+1][1]], c='red', marker='', linestyle=':')
 
 
-# Dimensions, labelning, saving
+
+
+# Dimensions, labeling, saving
 plt.xlabel("Cost")
 plt.ylabel("Accuracy")
 # plt.ylim((.98, .995))

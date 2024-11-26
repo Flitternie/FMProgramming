@@ -8,6 +8,7 @@ from itertools import product
 from network import ModuleNetwork, AggregateNetwork, CNN
 from torch.utils.data import DataLoader, TensorDataset
 from torch.distributions import Normal
+import math
 
 '''
 This file contains the implementation of the following bandit algorithms:
@@ -22,15 +23,33 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dtype_cuda = torch.bfloat16
 
 
+# I'd have liked if we could use a set interface. This is a loose TODO
+class BanditPlayer:
+    # I swear half of these parameters are the same
+    def __init__(self, progam_modules : list[tuple[str, int]], input_size=64, lambd=1, nu=0.1, hidden_size=128, alpha=1, module_costs=None, budget=0, horizon=0, cost_weighting=0):
+        raise NotImplementedError("Implement my subclass, not me")
+    
+    def select(self, context, t):
+        raise NotImplementedError("Implement my subclass, not me")
+    
+    def update(self, context, final_r):
+        raise NotImplementedError("Implement my subclass, not me")
+    
+    def train(self, chosen_arm=None, reward=None):
+        raise NotImplementedError("Implement my subclass, not me")
+
+
+
 # Multi-facet Contextual Bandit algorithm, from paper "Multi-facet Contextual Bandits: A Neural Network Perspective", original code at https://github.com/banyikun/KDD2021_MuFasa
-class MuFasa:
-    def __init__(self, modules, input_size, lambd=1, nu=0.1, hidden_size=128):
+class MuFasa: #!!!
+    def __init__(self, program_modules : list[tuple[str, int]], input_size, lambd=1, nu=0.1, hidden_size=128):
+        self.device = device
         # Initialize the network
         self.input_size = input_size  # Dimension of input context
         self.modules = []
-        for idx, (name, num_arms) in enumerate(modules.items()):
+        for idx, (name, num_arms) in enumerate(program_modules):
             self.modules.append(ModuleNetwork(idx, name, input_size, hidden_size, num_arms).to(device))
-        self.aggregator = AggregateNetwork(self.modules, input_size).to(device)
+        self.aggregator = AggregateNetwork(self.modules, math.prod([i[1] for i in program_modules])).to(device)
         
         self.context_list = []  # Store contexts
         self.reward_list = []  # Store rewards
@@ -42,7 +61,7 @@ class MuFasa:
 
     def select(self, context, t):
         # Convert context to tensors
-        input = torch.tensor(context).float().to(device)
+        input = torch.tensor(context, device=self.device, dtype=torch.float)
         
         def _factT(m):
             return np.sqrt(1 / (1 + m))
@@ -57,7 +76,7 @@ class MuFasa:
         for fx in mu:
             self.aggregator.zero_grad()
             fx.backward(retain_graph=True)
-            g = torch.cat([para.grad.flatten().detach() for para in self.aggregator.parameters()])
+            g = torch.cat([para.grad.flatten().detach() for para in self.aggregator.parameters()]).to(self.device)
             sigma2 = self.lambd * g * g / self.U
             sigma = torch.sqrt(torch.sum(sigma2))
             sample_r = fx.item() + self.nu * sigma.item()
@@ -65,11 +84,12 @@ class MuFasa:
             avg_sigma += sigma.item()
             avg_reward += sample_r
             g_list.append(g)
+        # print(len(sampled), sampled)
         arm = np.argmax(sampled)
         self.U += g_list[arm] * g_list[arm]
         return arm
     
-    def update(self, context, _, final_r, t):
+    def update(self, context, final_r):
         # Update context and reward lists with observed final rewards
         self.context_list.append(context)
         self.reward_list.append(final_r)
@@ -79,7 +99,7 @@ class MuFasa:
         context_list = self.context_list
         reward = self.reward_list
                 
-        optimizer = optim.SGD(self.aggregator.parameters(), lr=0.0001, weight_decay=self.lambd)
+        optimizer = optim.Adam(self.aggregator.parameters(), lr=0.001, weight_decay=self.lambd)
         length = len(reward)
         index = np.arange(length)
         np.random.shuffle(index)
@@ -213,7 +233,7 @@ class ContextualBandit:
         self.lr = 0.001
         # Visual version includes CNN
 
-        # TODO: if you're going to use this, review the modifications
+        # !!!: if you're going to use this, review the modifications
         # Arm embeddings
         self.arm_embeddings = torch.nn.Embedding(self.num_arms, self.hidden_size).to(device)
         
@@ -471,8 +491,9 @@ class CNNContextualBandit:
  
 
 
-class ModifiedSupervisedContextual:
-    def __init__(self, num_arms, input_size, hidden_size=512, device='cpu'):
+class ModifiedSupervisedContextual: # !!!
+    def __init__(self, num_arms, input_size, hidden_size=512, device=device):
+        print(num_arms)
         # Initialize the network
         self.input_size = input_size  # Dimension of input context
         self.num_arms = num_arms
@@ -496,12 +517,11 @@ class ModifiedSupervisedContextual:
         data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
         # Optimizer
-        optimizer = optim.SGD(#list(self.arm_embeddings.parameters()) +
-                              list(self.context_transform.parameters()) +
+        optimizer = optim.SGD(list(self.context_transform.parameters()) +
                               list(self.arm_transform.parameters()), 
                               lr=lr)
 
-        loss_fn = nn.MSELoss()
+        loss_fn = nn.MSELoss().to(self.device)
         
         # Training loop
         for epoch in range(num_epochs):
@@ -531,7 +551,7 @@ class ModifiedSupervisedContextual:
     
     def select(self, context):
         # Convert context to tensors
-        input_tensor = torch.tensor(context, dtype=torch.float32).to(self.device)
+        input_tensor = torch.tensor(context, dtype=torch.float32, device=self.device)
         transformed_context = self.activation(self.context_transform(input_tensor))
         
         # Predict reward for each arm
@@ -540,3 +560,4 @@ class ModifiedSupervisedContextual:
 
         # Select the arm with the highest predicted reward
         return torch.argmax(predicted_rewards).item()
+

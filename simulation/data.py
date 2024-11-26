@@ -78,7 +78,7 @@ class Dataset:
 
 
 # Intialize the dataset and the complexity measurer, and save them to cache
-num_sample = 2000 # Number of samples to use for the dataset
+num_sample = 2000 # Number of samples to use for the dataset # Caps out basically at 1999 # !!!
 try: 
     with open('./simulation/measurer.pkl', 'rb') as f:
         measurer = pickle.load(f)
