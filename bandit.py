@@ -324,7 +324,7 @@ class ContextualBandit:
         self._initialize_cache()
         return average_loss
 
-class ContextualRL:
+class Reinforce:
     def __init__(self, num_arms, arm_costs, cost_weighting, lambd=1, nu=0.1):
         self.device = device
         self.num_arms = num_arms
