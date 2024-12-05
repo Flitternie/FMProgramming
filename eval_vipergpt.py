@@ -2,19 +2,36 @@ import PIL
 import tqdm
 import json
 import urllib
+import random
 import torch
 import torchvision.transforms as transforms
+import numpy as np
 from pycocotools.coco import COCO
 
 from vipergpt.router import *
 from vipergpt.models import object_detection_models
 from vipergpt.models import vqa_models
 
+# set seed
+def set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+
+set_seed(42)
+
 transform = transforms.Compose([
+    transforms.Resize((256, 256)),
     transforms.ToTensor(),
 ])
 
-unloader = transforms.ToPILImage()
+unloader = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize((256, 256)),
+    transforms.ToTensor(),
+])
 
 # Function to load and execute a user program from a JSON file
 def load_user_program(code):
@@ -51,63 +68,77 @@ baseline_negatives = {
     "blip": []
 }
 
-log = open("log.txt", "a+", buffering=1)
-positives, negatives = [], []
-for i in data[2:]:
-    log.write(f"Query: {i['query']}\n")
-    query = i['query']
-    print(query)
-
-    code = i['code']
-    program_str, execute_command = load_user_program(code)
-    routing_system = RoutingSystem(execute_command, program_str)
-
-    print("Start loading images")
-
+class ImageRetrievalDataset(torch.utils.data.Dataset):
+    def __init__(self, postive_images, postive_img_ids, negative_images, negative_img_ids, random_seed=42):
+        self.positive_images = [unloader(img) for img in postive_images]
+        self.negative_images = [unloader(img) for img in negative_images]
+        self.positive_img_ids = postive_img_ids
+        self.negative_img_ids = negative_img_ids
+        self.random_seed = random_seed
+        self._shuffle()
     
-    negative_data = torch.load(open(f"./EfficientAgentBench/data/{i['id']}/negative_tensors.pt", "rb"))
-    negative_images = negative_data[1]
+    def _shuffle(self):
+        random.seed(self.random_seed)
+        self.images = self.positive_images + self.negative_images
+        self.labels = [1] * len(self.positive_images) + [0] * len(self.negative_images)
+        self.img_ids = self.positive_img_ids + self.negative_img_ids
+        self.indices = list(range(len(self.images)))
+        random.shuffle(self.indices)
 
-    positive_image_ids = i['positive_images']
-    positive_images = []
-    for i in positive_image_ids:
-        img_tensor = download_image(coco.loadImgs(i)[0]['coco_url'])
-        positive_images.append(img_tensor)
+    def __len__(self):
+        return len(self.images)
     
-    print("Finished loading images")
+    def __getitem__(self, idx):
+        idx = self.indices[idx]
+        return self.images[idx], self.labels[idx], self.img_ids[idx]
 
-    pbar = tqdm.tqdm(total=len(positive_images) + len(negative_images))
 
-    llava_positive = []
-    blip_positive = []
-    for image, id in zip(positive_images, positive_image_ids):
-        image = unloader(image)
-        llava_output = vqa_models.models[-1](image, f"Does this image contain {query.lower()}?")
-        blip_output = vqa_models.models[-2](image, f"Does this image contain {query.lower()}?")
 
-        wrapped = routing_system.routing(image)
-        output = wrapped(image)
+for cost_weighting in [0, 0.0001, 0.001, 0.01, 0.1]:
+    log = open(f"log_new_{cost_weighting}.txt", "a+", buffering=1)
+    positives, negatives = [], []
+    for i in data:
+        log.write(f"Query: {i['query']}\n")
+        query = i['query']
+        print(query)
 
-        log.write(f"Img: {id}; Label: 1; LLAVA: {llava_output}; BLIP: {blip_output}; ViperGPT: {output};\n")    
-        pbar.update(1)    
+        code = i['code']
+        program_str, execute_command = load_user_program(code)
+        routing_system = RoutingSystem(execute_command, program_str, cost_weighting)
 
-    # baseline_positives["llava"].append(llava_positive)
-    # baseline_positives["blip"].append(blip_positive)
-    # positives.append(positive_images)
+        print("Start loading images")
 
-    llava_negative = []
-    blip_negative = []
-    for i in range(len(negative_images)):
-        image = unloader(negative_images[i])
-        llava_output = vqa_models.models[-1](image, f"Does this image contain {query.lower()}?")
-        blip_output = vqa_models.models[-2](image, f"Does this image contain {query.lower()}?")
-        llava_negative.append("yes" in llava_output)
+        
+        negative_data = torch.load(open(f"./EfficientAgentBench/data/{i['id']}/negative_tensors.pt", "rb"))
+        negative_images = negative_data[1]
 
-        wrapped = routing_system.routing(image)
-        output = wrapped(image)
+        positive_image_ids = i['positive_images']
+        positive_images = []
+        for i in positive_image_ids:
+            img_tensor = download_image(coco.loadImgs(i)[0]['coco_url'])
+            positive_images.append(img_tensor)
+        
+        data = ImageRetrievalDataset(positive_images, positive_image_ids, negative_images, negative_data[0], random_seed=42)
+        print("Finished loading images")
+        pbar = tqdm.tqdm(total=len(data))
+        for idx in range(len(data)):
+            image, label, id = data[idx]
+            # llava_output = vqa_models.models[-1](image, f"Does this image contain {query.lower()}?")
+            # blip_output = vqa_models.models[-2](image, f"Does this image contain {query.lower()}?")
+            routed_program, routing_decision, routing_idx = routing_system.routing(image)
+            try:
+                output = routed_program(image)
+            except:
+                output = -1
 
-        log.write(f"Img: {negative_data[0][i]}; Label: 0; LLAVA: {llava_output}; BLIP: {blip_output}; ViperGPT: {output};\n")
-        pbar.update(1)
-    pbar.close()
+            if int(label) == 1:
+                routing_system.update_router(image, routing_idx, 100 if int(output) == int(label) else -100)
+            elif int(label) == 0:
+                routing_system.update_router(image, routing_idx, 100 if int(output) == int(label) else -100)
 
-log.close()
+            log.write(f"Img: {id}; Label: {label}; ViperGPT: {output}; Routing: {routing_idx};\n")
+            # log.write(f"Img: {id}; Label: 1; LLAVA: {llava_output}; BLIP: {blip_output}; ViperGPT: {output};\n")    
+            pbar.update(1)    
+        pbar.close()
+
+    log.close()

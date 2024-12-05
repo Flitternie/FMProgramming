@@ -1,7 +1,7 @@
 import numpy as np
 from operator import mul
 from functools import reduce
-from bandit import MuFasa, UCB1, UCB_ALP, ContextualBandit, SupervisedContextual
+from bandit import MuFasa, UCB1, UCB_ALP, ContextualBandit, Reinforce
 
 class Router():
     def __init__(self, routing_info, routing_options, cost_weighting=0):
@@ -19,6 +19,7 @@ class Router():
     
     def initialize(self):
         self.algo = ContextualBandit(self.num_arms, self.arm_costs, self.cost_weighting, self.lamb, self.nu)
+        # self.algo = Reinforce(self.num_arms, self.arm_costs, self.cost_weighting, self.lamb, self.nu)
 
     def compute_costs(self, num_arms, routing_info, routing_options):
         arm_costs = []

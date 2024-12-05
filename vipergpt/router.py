@@ -12,23 +12,24 @@ routing_options = {
 }
 
 class RoutingSystem:
-    def __init__(self, func, source):
+    def __init__(self, func, source, cost_weighting):
         self.func = func
         self.source = source
+        self.cost_weighting = cost_weighting
         self.function_calls = self.analyze_user_program()
         self.initialize(self.function_calls)
     
     def initialize(self, function_calls):
         # Initialize routing decisions based on function calls in the user program
         self.routing_info = {call['identifier']: 0 for call in function_calls}  # Default routing to 0 (small model)
-        self.router = Router(self.routing_info, routing_options, cost_weighting=0)
+        self.router = Router(self.routing_info, routing_options, self.cost_weighting)
     
     def make_routing_decisions(self, input_image) -> dict:
-        # routing_decisions, idx = self.router.select(input_image)
-        # return routing_decisions, idx
+        routing_decisions, idx = self.router.select(input_image)
+        return routing_decisions, idx
         
         # For testing purposes, always return the small model
-        return {key: 0 for key in self.routing_info.keys()}, 0
+        # return {key: 0 for key in self.routing_info.keys()}, 0
         # For testing purposes, always return the large model
         # return {key: 1 for key in self.routing_info.keys()}, self.router.num_arms-1
 
