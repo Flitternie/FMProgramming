@@ -95,7 +95,7 @@ class ImageRetrievalDataset(torch.utils.data.Dataset):
 
 
 for cost_weighting in [0, 0.0001, 0.001, 0.01, 0.1]:
-    log = open(f"log_new_{cost_weighting}.txt", "a+", buffering=1)
+    log = open(f"log_rl_{cost_weighting}.txt", "a+", buffering=1)
     positives, negatives = [], []
     for i in data:
         log.write(f"Query: {i['query']}\n")
@@ -118,11 +118,11 @@ for cost_weighting in [0, 0.0001, 0.001, 0.01, 0.1]:
             img_tensor = download_image(coco.loadImgs(i)[0]['coco_url'])
             positive_images.append(img_tensor)
         
-        data = ImageRetrievalDataset(positive_images, positive_image_ids, negative_images, negative_data[0], random_seed=42)
+        dataset = ImageRetrievalDataset(positive_images, positive_image_ids, negative_images, negative_data[0], random_seed=42)
         print("Finished loading images")
-        pbar = tqdm.tqdm(total=len(data))
-        for idx in range(len(data)):
-            image, label, id = data[idx]
+        pbar = tqdm.tqdm(total=len(dataset))
+        for idx in range(len(dataset)):
+            image, label, id = dataset[idx]
             # llava_output = vqa_models.models[-1](image, f"Does this image contain {query.lower()}?")
             # blip_output = vqa_models.models[-2](image, f"Does this image contain {query.lower()}?")
             routed_program, routing_decision, routing_idx = routing_system.routing(image)
@@ -131,10 +131,10 @@ for cost_weighting in [0, 0.0001, 0.001, 0.01, 0.1]:
             except:
                 output = -1
 
-            if int(label) == 1:
+            if int(label) == 1: # Positive
                 routing_system.update_router(image, routing_idx, 100 if int(output) == int(label) else -100)
-            elif int(label) == 0:
-                routing_system.update_router(image, routing_idx, 100 if int(output) == int(label) else -100)
+            elif int(label) == 0: # Negative
+                routing_system.update_router(image, routing_idx, 100 if int(output) == int(label) else 0)
 
             log.write(f"Img: {id}; Label: {label}; ViperGPT: {output}; Routing: {routing_idx};\n")
             # log.write(f"Img: {id}; Label: 1; LLAVA: {llava_output}; BLIP: {blip_output}; ViperGPT: {output};\n")    

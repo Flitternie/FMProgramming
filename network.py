@@ -20,6 +20,7 @@ class MLP(nn.Module):
         transformed_context = self.activation(transformed_context)
         return transformed_context
 
+
 class CNN(nn.Module):
     def __init__(self, num_classes):
         super(CNN, self).__init__()
@@ -62,6 +63,7 @@ class ModuleNetwork(nn.Module):
         out = torch.matmul(out, self.arm_embeddings.weight.t())
         return out
 
+
 class AggregateNetwork(nn.Module):
     '''
     This class defines the neural network that aggregates the outputs of the bandit modules to compute the expected reward for each combination of arms.
@@ -83,7 +85,6 @@ class AggregateNetwork(nn.Module):
         out = self.relu(out)
         out = self.fc2(out)
         return out.view(-1)  # Flatten to [num_combinations]
-
 
 
 class LSTMModuleNetwork(nn.Module):
@@ -149,6 +150,7 @@ class LSTMModuleNetwork(nn.Module):
     def init_hidden(self):
         return (torch.zeros(1, 1, self.hidden_size),
                 torch.zeros(1, 1, self.hidden_size))
+
 
 class LSTMAggregateNetwork(nn.Module):
     '''

@@ -2,7 +2,7 @@ import ast
 import inspect
 import astor
 from vipergpt.image_patch import ImagePatch
-from routing import Router
+from routing import Router, StructuredRouter
 
 routing_options = {
     'find': [30, 90],
@@ -13,6 +13,22 @@ routing_options = {
 
 class RoutingSystem:
     def __init__(self, func, source, cost_weighting):
+        '''
+        This class initializes the routing system for the user program.
+
+        Args:
+            func: Function to execute the user program
+            source: Source code of the user program
+            cost_weighting: Cost weighting parameter for the router
+
+        Methods:
+            initialize: Initializes the routing decisions based on the function calls in the user program
+            make_routing_decisions: Makes routing decisions based on the input image
+            routing: Modifies the AST of the user program to add routing arguments
+            update_router: Updates the router based on the reward received
+            analyze_user_program: Extracts the method calls and queries from a user program
+        
+        '''
         self.func = func
         self.source = source
         self.cost_weighting = cost_weighting
@@ -21,20 +37,52 @@ class RoutingSystem:
     
     def initialize(self, function_calls):
         # Initialize routing decisions based on function calls in the user program
+        '''
+        This function initializes the routing decisions based on the function calls in the user program.
+
+        Args:
+            function_calls: List of dictionaries containing the function calls and queries
+
+        '''
         self.routing_info = {call['identifier']: 0 for call in function_calls}  # Default routing to 0 (small model)
         self.router = Router(self.routing_info, routing_options, self.cost_weighting)
+        # self.router = StructuredRouter(self.routing_info, routing_options, self.cost_weighting)
     
     def make_routing_decisions(self, input_image) -> dict:
-        routing_decisions, idx = self.router.select(input_image)
-        return routing_decisions, idx
+        '''
+        This function makes routing decisions based on the input image.
+
+        Args:
+            input_image: ImagePatch object
+        
+        Returns:
+            routing_decisions: Dictionary containing the routing decisions for each function call
+            idx: Index of the arm or the group of arms selected by the router
+
+        Notes:
         
         # For testing purposes, always return the small model
         # return {key: 0 for key in self.routing_info.keys()}, 0
         # For testing purposes, always return the large model
         # return {key: 1 for key in self.routing_info.keys()}, self.router.num_arms-1
+        '''
+        routing_decisions, idx = self.router.select(input_image)
+        return routing_decisions, idx
 
-    # Function to modify the AST of the user program to add routing arguments
     def routing(self, input, display=False):
+        '''
+        This function modifies the AST of the user program to add routing arguments.
+
+        Args:
+            input: ImagePatch object
+            display: Boolean to display the modified AST
+
+        Returns:
+            execute_command: Function to execute the modified user program
+            routing_decisions: Dictionary containing the routing decisions for each function call
+            idx: Index of the arm selected by the router
+        
+        '''
         tree = ast.parse(self.source)
         routing_decisions, idx = self.make_routing_decisions(input)
         class RoutingArgumentTransformer(ast.NodeTransformer):
@@ -72,11 +120,25 @@ class RoutingSystem:
         return execute_command, routing_decisions, idx
 
     def update_router(self, input_image, routing_idx, reward):
-        # Update the router based on the reward received
+        '''
+        This function updates the router based on the reward received.
+
+        Args:
+            input_image: ImagePatch object
+            routing_idx: Index of the arm selected by the router
+            reward: Reward received
+        
+        '''
         self.router.update(input_image, routing_idx, reward)
 
-    # Function to extract the method calls and queries from a user program
     def analyze_user_program(self):
+        '''
+        This function extracts the method calls and queries from a user program.
+
+        Returns:
+            function_calls: List of dictionaries containing the function calls and queries
+
+        '''
         self.source = inspect.getsource(self.source) if not isinstance(self.source, str) else self.source
         tree = ast.parse(self.source)
         function_calls = []

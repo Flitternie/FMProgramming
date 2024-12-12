@@ -324,8 +324,9 @@ class ContextualBandit:
         self._initialize_cache()
         return average_loss
 
+
 class Reinforce:
-    def __init__(self, num_arms, arm_costs, cost_weighting, lambd=1, nu=0.1):
+    def __init__(self, num_arms, arm_costs, cost_weighting, lambd, nu, lr=0.001):
         self.device = device
         self.num_arms = num_arms
         self.arm_costs = arm_costs
@@ -333,7 +334,7 @@ class Reinforce:
         self.model = CNN(num_arms).to(self.device)
         self.lambd = lambd
         self.nu = nu
-        self.lr = 0.001
+        self.lr = lr
         
         total_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         self.U = lambd * torch.ones((total_params,)).to(next(self.model.parameters()).device)
@@ -424,26 +425,35 @@ class Reinforce:
 
 
 
-class StructuredPolicy:
-    def __init__(self, module_info, cost_weighting):
+class StructuredReinforce:
+    def __init__(self, module_info, cost_weighting, lambd, nu, lr=0.001):
+        self.device = device
         self.num_modules = len(module_info.keys())
-        self.modular_networks = [CNN(num_classes=num_arms).to(device) for num_arms in module_info.values()]
-        self.module_costs = [costs for costs in module_info.values()]
-        self.cost_weighting = cost_weighting
+        self.policies = [Reinforce(num_arms=len(arm_costs), arm_costs=arm_costs, cost_weighting=cost_weighting, lambd=lambd, nu=nu) for arm_costs in module_info.values()]
 
     
-    def _initialize_cache(self):
-        # Storage for learning
-        pass
+    def select(self, context, t):
+        # Select arm for each policy
+        selected_arms = []
+        sampled_rewards_list = []
+        true_rewards_list = []
+        for policy in self.policies:
+            selected_arm, sampled_rewards, true_rewards = policy.select(context, t)
+            selected_arms.append(selected_arm)
+            sampled_rewards_list.append(sampled_rewards)
+            true_rewards_list.append(true_rewards)
+        return selected_arms, sampled_rewards_list, true_rewards_list
     
-    def select(self, context):
-        pass
-    
-    def update(self, context, arm_idx, reward):
-        pass
+    def update(self, context, arm_indices, final_r, t):
+        # Update context and reward lists with observed final rewards
+        for i, policy in enumerate(self.policies):
+            policy.update(context, arm_indices[i], final_r, t)
     
     def train(self, num_epochs=5, batch_size=8):
-        pass
+        # Train the network using REINFORCE algorithm
+        for policy in self.policies:
+            policy.train(num_epochs, batch_size)
+
 
 
 class Supervised:
