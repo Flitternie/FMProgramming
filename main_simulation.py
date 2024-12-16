@@ -4,7 +4,7 @@ import numpy as np
 from tqdm import tqdm
 
 from simulation.data import measurer, get_dataset, num_sample
-from bandit import MuFasa, UCB1, UCB_ALP, ModifiedSupervisedContextual, ContextualBandit
+from bandit import MuFasa, UCB1, UCB_ALP, ModifiedSupervisedContextual, ContextualBandit, OnlineTestAlgorithm
 from simulation.execute import idx_to_arms, routing
 from neural_bandit_neuralts import NeuralTS
 # from neural_bandit_neuralucb import NeuralUCB
@@ -15,7 +15,7 @@ from utils import *
 
 
 # For testing, makes sure cuda is functioning reasonably
-import torch # It already will be, but wtv
+import torch # It already should be
 if torch.cuda.is_available(): 
     print("Cuda available on device:", torch.cuda.current_device())
     print(torch.cuda.get_device_name(torch.cuda.current_device()))
@@ -44,6 +44,7 @@ modules = {
     'functionA': 3,
     'functionB': 2,
     'functionC': 4,
+    # 'functionC' : 3
 }
 
 log_dir = "./simulation/logs"
@@ -65,7 +66,7 @@ def baseline():
     '''
     This function runs the baseline experiment, where the program is executed with all possible combinations of arms.
     '''
-    os.remove(f"{log_dir}/baseline.txt")
+    if(os.path.isfile(f"{log_dir}/baseline.txt")): os.remove(f"{log_dir}/baseline.txt")
     for arm_idx in range(num_arms):
         set_seed(7)
         dataset = get_dataset()
@@ -513,6 +514,78 @@ def mufasa(cost_weighting_list, save_dir, arg_nu=1): # !!!
 
         print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
 
+def online_misc(cost_weighting_list, save_dir, arg_nu=0.1):
+    # hyperparameters
+    arg_lambda = 0.0001 # Regularization parameter
+    # arg_nu = 0.1 # Exploration-exploitation trade-off parameter
+    arg_hidden_size = 128 # Hidden size of the neural network
+    
+
+    for arg_cost_weighting in cost_weighting_list:
+        print("Cost weighting: ", arg_cost_weighting)
+        
+        set_seed(7)
+        dataset = get_dataset()
+        input_size = dataset.dim
+        
+        algo = OnlineTestAlgorithm(num_arms, input_size, hidden_size=arg_hidden_size, explore_weight=arg_nu)
+
+        gathered_reward = []
+        regrets = []
+        total_correct = 0
+        total_cost = 0
+
+        pbar = tqdm(total=total_len)
+        f = open(os.path.join(save_dir, np.format_float_positional(arg_cost_weighting) + ".txt"), "w", buffering=1)
+        for t in range(total_len):
+            context = dataset.step()
+            input_feature = np.array(context)
+            
+            arm_idx, selection_tensor = algo.select(input_feature) 
+
+            if arm_idx is None:
+                raise ValueError("Invalid arm index")
+            
+            selected_arms = idx_to_arms(arm_idx, program, modules)
+            # Execute the program with the selected arms
+            exec_result, exec_cost, final_reward = get_reward(context, program, arm_idx, arg_cost_weighting, t)
+            
+            # Does this really happen with online learning?
+            # rewards = []
+            # for idx in range(num_arms):
+            #     _, _, reward = get_reward(context, program, idx, arg_cost_weighting, t)
+            #     rewards.append(reward)
+            # regret = max(rewards) - final_reward
+            # regrets.append(regret)
+
+            total_correct += exec_result
+            # print(f"exec result: {exec_result}") # Need a good definition for sufficiency
+            total_cost += exec_cost
+            gathered_reward.append(final_reward)
+
+            algo.update(input_feature, arm_idx, exec_result, selection_tensor, final_reward)
+            # There just isn't enough data/entry to get a good 'feel' for the arms?
+            
+            if t % 8 == 0:
+                loss = algo.train()
+            
+            avg_accuracy, avg_cost = total_correct/(t+1), total_cost/(t+1)
+            # avg_regret = sum(regrets)/len(regrets)
+            try:
+                line = "; ".join(str(i) for i in [t, loss, measurer.complexity(context), selected_arms, exec_result, exec_cost, avg_accuracy, avg_cost, sum(gathered_reward)/len(gathered_reward)]) + "\n"
+                pbar.set_description("Accuracy: {:.3f}, Average cost: {:.3f}, Loss: {:3f}".format(avg_accuracy, avg_cost, loss))
+            except:
+                line = "; ".join(str(i) for i in [t, 0, measurer.complexity(context), selected_arms, exec_result, exec_cost, avg_accuracy, avg_cost, sum(gathered_reward)/len(gathered_reward)]) + "\n"
+                pbar.set_description("Accuracy: {:.3f}, Average cost: {:.3f}".format(avg_accuracy, avg_cost))
+            f.write(line)
+            pbar.update(1)
+        
+        f.close()
+        pbar.close()
+        print("Accuracy: ", total_correct/len(dataset))
+        print("Average cost: ", total_cost/len(dataset))
+        
+        print(f"**** Finished processing cost weighting: {arg_cost_weighting} ****")
 
 
 if __name__ == "__main__":
@@ -521,16 +594,25 @@ if __name__ == "__main__":
         exp_name = sys.argv[1]
         print("Experiment name: ", exp_name)
 
+    # Test the baseline
+    # baseline()
+
     # List of cost weightings to test
     cost_weighting_list = []
-    cost_weighting_list += [0.0, .1]
+    # cost_weighting_list += [0.0, .1]
+    # cost_weighting_list += [.5, 1]
+    # cost_weighting_list += [2, 4]
+    # cost_weighting_list += [0.01, 0.05]
+
+    for i in range(0, 20):
+        cost_weighting_list += [i / 10]
+
     # cost_weighting_list += [0.0005, 0.001, 0.005]
-    cost_weighting_list += [0.01, 0.05]
-    # cost_weighting_list = [.001, .002, .003, .004, .005, .006, .007, .008, .009]
-    # cost_weighting_list = [.005, .01, .015, .02, .025, .03, .035, .04, .045, .05, .055, .06, .065, .07, .075, .08, .085, .09, .095]
-    # cost_weighting_list += [0.0001, 0.0002, 0.0003, 0.0004]
+    # cost_weighting_list += [.001, .002, .003, .004, .005, .006, .007, .008, .009]
+    cost_weighting_list += [.005, .01, .015, .02, .025, .03, .035, .04, .045, .05, .055, .06, .065, .07, .075, .08, .085, .09, .095]
+    cost_weighting_list += [0.0001, 0.0002, 0.0003, 0.0004]
     # cost_weighting_list += [.25, .5, 1, 1.5, 2, 3]
-    # cost_weighting_list += [0.0006, 0.0007, 0.0008, 0.0009]
+    cost_weighting_list += [0.0006, 0.0007, 0.0008, 0.0009]
     
     # Test the oracle
     # save_dir = f"{log_dir}/{exp_name}oracle/"
@@ -539,10 +621,10 @@ if __name__ == "__main__":
     # oracle(cost_weighting_list, save_dir)
 
     # Test the MuFASA
-    save_dir = f"{log_dir}/{exp_name}mufasa/"
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir, exist_ok=True)
-    mufasa(cost_weighting_list, save_dir)
+    # save_dir = f"{log_dir}/{exp_name}mufasa/"
+    # if not os.path.exists(save_dir):
+    #     os.makedirs(save_dir, exist_ok=True)
+    # mufasa(cost_weighting_list, save_dir)
 
     # Test the UCB1
     # save_dir = f"{log_dir}/{exp_name}ucb1/"
@@ -561,6 +643,12 @@ if __name__ == "__main__":
     #     os.makedirs(save_dir, exist_ok=True)
     # supervised(cost_weighting_list, save_dir)
 
+    # for n in [0, 0.0001, 0.001, 0.01, 0.1, 1]:
+    # save_dir = f"{log_dir}/{exp_name}OMisc/"
+    # if not os.path.exists(save_dir):
+    #     os.makedirs(save_dir, exist_ok=True)
+    # online_misc(cost_weighting_list, save_dir)
+
     # save_dir = f"{log_dir}/{exp_name}supervised_mufasa/"
     # if not os.path.exists(save_dir):
     #     os.makedirs(save_dir, exist_ok=True)
@@ -572,5 +660,4 @@ if __name__ == "__main__":
     #     os.makedirs(save_dir, exist_ok=True)
     # neural(cost_weighting_list, save_dir)
 
-    # Test the baseline
-    # baseline()
+    
