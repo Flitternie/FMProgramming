@@ -69,12 +69,13 @@ class RoutingSystem:
         routing_decisions, idx = self.router.select(input_image)
         return routing_decisions, idx
 
-    def routing(self, input, display=False):
+    def routing(self, input, config=None, display=False):
         '''
         This function modifies the AST of the user program to add routing arguments.
 
         Args:
             input: ImagePatch object
+            config: None for dynamic routing, or 0 for static routing with the smallest model configuration, or 1 for the largest model configuration
             display: Boolean to display the modified AST
 
         Returns:
@@ -84,7 +85,13 @@ class RoutingSystem:
         
         '''
         tree = ast.parse(self.source)
-        routing_decisions, idx = self.make_routing_decisions(input)
+        if config is not None:
+            assert config in [0, 1], "Invalid configuration"
+            routing_decisions = {key: config for key in self.routing_info.keys()}
+            idx = self.router.num_arms - 1 if config == 1 else 0
+        else:
+            routing_decisions, idx = self.make_routing_decisions(input)
+
         class RoutingArgumentTransformer(ast.NodeTransformer):
             def visit_Call(self, node):
                 if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):

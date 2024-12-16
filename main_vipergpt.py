@@ -131,10 +131,18 @@ for cost_weighting in [0, 0.0001, 0.001, 0.01, 0.1]:
             except:
                 output = -1
 
-            if int(label) == 1: # Positive
-                routing_system.update_router(image, routing_idx, 100 if int(output) == int(label) else -100)
-            elif int(label) == 0: # Negative
-                routing_system.update_router(image, routing_idx, 100 if int(output) == int(label) else 0)
+            if int(label) == 1: # Positive, Minority class
+                if int(output) == int(label):
+                    reward = 100 # True Positive
+                else:
+                    reward = -100 # False Negative, or -200 to penalize more for missed positives
+                
+            elif int(label) == 0: # Negative, Majority class
+                if int(output) == int(label): 
+                    reward = 1 # True Negative
+                else:
+                    reward = -10 # False Positive, or -20 to penalize more for false positives
+            routing_system.update_router(image, routing_idx, reward)
 
             log.write(f"Img: {id}; Label: {label}; ViperGPT: {output}; Routing: {routing_idx};\n")
             # log.write(f"Img: {id}; Label: 1; LLAVA: {llava_output}; BLIP: {blip_output}; ViperGPT: {output};\n")    
