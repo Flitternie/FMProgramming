@@ -11,8 +11,8 @@ from torchvision.ops import box_iou
 from typing import Union, List
 from word2number import w2n
 
-from vipergpt.models import config, object_detection, image_text_matching, batched_image_text_matching, image_text_classify, vqa, depth, llm
-from vipergpt.utils import show_single_image, load_json
+from execution.models import config, object_detection, image_text_matching, batched_image_text_matching, image_text_classify, vqa, depth, llm
+from execution.utils import show_single_image, load_json
 
 
 class ImagePatch:

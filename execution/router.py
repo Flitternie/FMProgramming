@@ -1,7 +1,7 @@
 import ast
 import inspect
 import astor
-from vipergpt.image_patch import ImagePatch
+from execution.image_patch import ImagePatch
 from routing import Router, StructuredRouter
 
 routing_options = {

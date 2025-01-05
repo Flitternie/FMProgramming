@@ -6,9 +6,9 @@ import torch
 import torchvision.transforms as transforms
 from pycocotools.coco import COCO
 
-from vipergpt.router import *
-from vipergpt.models import object_detection_models
-from vipergpt.models import vqa_models
+from execution.router import *
+from execution.models import object_detection_models
+from execution.models import vqa_models
 
 def download_image(url):
     img = PIL.Image.open(urllib.request.urlopen(url))
