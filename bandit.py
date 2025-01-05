@@ -2,12 +2,14 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn as nn
+from torch import device
 import tqdm
 from scipy.optimize import linprog
 from itertools import product
 from network import ModuleNetwork, AggregateNetwork, CNN
 from torch.utils.data import DataLoader, TensorDataset
 from torch.distributions import Normal
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 '''
 This file contains the implementation of the following bandit algorithms:
@@ -326,112 +328,128 @@ class ContextualBandit:
 
 
 class Reinforce:
-    def __init__(self, num_arms, arm_costs, cost_weighting, lambd, nu, lr=0.001):
-        self.device = device
+    def __init__(self, num_arms, arm_costs, cost_weighting, lambd, nu, lr=0.001, device=None):
+        self.device = device if device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_arms = num_arms
-        self.arm_costs = arm_costs
+        self.arm_costs = torch.tensor(arm_costs, device=self.device)
         self.cost_weighting = cost_weighting
-        self.model = CNN(num_arms).to(self.device)
         self.lambd = lambd
         self.nu = nu
         self.lr = lr
         
-        total_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        self.U = lambd * torch.ones((total_params,)).to(next(self.model.parameters()).device)
-
-        self.optimizer = optim.AdamW(list(self.model.parameters()), lr=self.lr)
+        # Model Initialization
+        self.model = CNN(num_arms).to(self.device)
+        self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr)
+        
+        # Initialize U (parameter uncertainties) and cache
+        self._initialize_uncertainties()
         self._initialize_cache()
-    
+
+    def _initialize_uncertainties(self):
+        total_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        self.U = self.lambd * torch.ones(total_params, device=self.device)
+
     def _initialize_cache(self):
-        # Storage for learning
         self.context_list = []
         self.arm_list = []
         self.reward_list = []
-    
-    def select(self, context, t):
-        # Convert context to tensors and get transformed context from model
-        context_tensor = torch.tensor(context).float().to(next(self.model.parameters()).device)
-        model_outputs = self.model(context_tensor)
-        
-        g_list = []  # Gradients list
-        sampled_rewards = []  # Sampled rewards
-        true_rewards = []  # True rewards
-        
-        # Compute the sigma and sampled reward for each arm combination using gradient-based Thompson Sampling
-        for arm_index in range(self.num_arms):
-            reward_prediction = model_outputs[arm_index]
 
-            # Calculate gradient for Thompson Sampling
+    def select(self, context, t):
+        # Convert context to tensor
+        context_tensor = torch.tensor(context, dtype=torch.float32, device=self.device)
+        context_tensor = context_tensor.unsqueeze(0)  # Add batch dimension
+        model_outputs = self.model(context_tensor).squeeze(0)
+
+        # Store gradients, rewards, and sampled rewards
+        g_list = []
+        sampled_rewards = torch.zeros(self.num_arms, device=self.device)
+        true_rewards = model_outputs.clone().detach()  # Store predicted rewards
+
+        for arm_index in range(self.num_arms):
+            # Zero gradients and compute gradient for the arm
             self.model.zero_grad()
+            reward_prediction = model_outputs[arm_index]
             reward_prediction.backward(retain_graph=True)
 
             # Collect gradients
-            gradients = torch.cat([p.grad.flatten().detach() for p in list(self.model.parameters())])
+            gradients = torch.cat([p.grad.flatten() for p in self.model.parameters()])
             
-            # Sample from Normal distribution based on gradient norms for Thompson Sampling
+            # Compute sigma (uncertainty measure)
             sigma = torch.sqrt(torch.clamp(self.lambd * torch.sum(gradients * gradients / self.U), min=1e-6))
+            
+            # Sample reward with added Gaussian noise (Thompson Sampling)
             sampled_r = reward_prediction.item() + Normal(0, self.nu * sigma.item()).sample().item()
-            sampled_r = sampled_r - self.arm_costs[arm_index] * self.cost_weighting
-            true_rewards.append(reward_prediction.item())
-            sampled_rewards.append(sampled_r)
+            sampled_r -= self.arm_costs[arm_index] * self.cost_weighting
+            sampled_rewards[arm_index] = sampled_r
             g_list.append(gradients)
-        
-        # Select arm based on Thompson Sampling
-        selected_arm = torch.argmax(torch.tensor(sampled_rewards)).item()
-        self.U += g_list[selected_arm] * g_list[selected_arm]
-        return selected_arm, sampled_rewards, true_rewards
-    
+
+        # Select the arm with the highest sampled reward
+        selected_arm = torch.argmax(sampled_rewards).item()
+        self.U += g_list[selected_arm] ** 2  # Update U using the gradients of selected arm
+
+        return selected_arm, sampled_rewards.tolist(), true_rewards.tolist()
+
     def update(self, context, arm_idx, final_r, t):
-        # Update context and reward lists with observed final rewards
+        # Cache training data for later use
         self.context_list.append(context)
         self.arm_list.append(arm_idx)
         self.reward_list.append(final_r)
-    
-    def train(self, num_epochs=5, batch_size=8):
-        # Train the network using REINFORCE algorithm
+
+    def train(self, num_epochs, batch_size):
+        self.model.train()  # Set model to training mode
+        
         for epoch in range(num_epochs):
-            for i in range(0, len(self.reward_list), batch_size):
-                batch_contexts = self.context_list[i:i+batch_size]
-                batch_arm_indices = self.arm_list[i:i+batch_size]
-                batch_rewards = self.reward_list[i:i+batch_size]
+            epoch_loss = 0
+            num_batches = len(self.reward_list) // batch_size + 1
+            
+            for i in range(num_batches):
+                start_idx = i * batch_size
+                end_idx = min(start_idx + batch_size, len(self.reward_list))
                 
-                if len(batch_rewards) == 0:
+                if start_idx >= end_idx:
                     continue
                 
+                # Fetch batch data
+                # Creating a tensor from a list of numpy.ndarrays is extremely slow. Converting the list to a single numpy.ndarray with numpy.array() before converting to a tensor. 
+                batch_contexts = torch.tensor(np.array(self.context_list[start_idx:end_idx]), dtype=torch.float32, device=self.device)
+                batch_arm_indices = torch.tensor(np.array(self.arm_list[start_idx:end_idx]), dtype=torch.long, device=self.device)
+                batch_rewards = torch.tensor(np.array(self.reward_list[start_idx:end_idx]), dtype=torch.float32, device=self.device)
+                
+                # Forward pass
+                logits = self.model(batch_contexts)
+                probs = torch.softmax(logits, dim=1)
+                
+                # Compute batch loss (negative REINFORCE loss)
+                log_probs = torch.log(probs[range(len(batch_arm_indices)), batch_arm_indices] + 1e-6)
+                loss = -torch.mean(batch_rewards * log_probs)
+                
+                # Backward pass and optimization step
                 self.optimizer.zero_grad()
-                batch_loss = 0
-                
-                # Process each item in the batch
-                for j in range(len(batch_rewards)):
-                    context = torch.tensor(batch_contexts[j]).float().to(self.device)
-                    arm = batch_arm_indices[j]
-                    reward = batch_rewards[j]
-                    
-                    # Forward pass
-                    logits = self.model(context)
-                    probs = torch.softmax(logits, dim=0)
-                    log_prob = torch.log(probs[arm] + 1e-6)  # Adding a small value to avoid log(0)
-                    
-                    # REINFORCE loss: negative of reward-weighted log probability
-                    loss = -reward * log_prob
-                    batch_loss += loss
-                
-                # Average batch loss
-                batch_loss /= len(batch_rewards)
-                batch_loss.backward()
+                loss.backward()
                 self.optimizer.step()
+                
+                epoch_loss += loss.item()
             
-            print(f"Epoch [{epoch+1}/{num_epochs}] completed. Average loss: {batch_loss.item()}")
-
+            avg_loss = epoch_loss / num_batches
+            print(f"Epoch [{epoch + 1}/{num_epochs}] completed. Average loss: {avg_loss:.6f}")
+        
+        self._initialize_cache()  # Clear cache after training
 
 
 class StructuredReinforce:
     def __init__(self, module_info, cost_weighting, lambd, nu, lr=0.001):
-        self.device = device
         self.num_modules = len(module_info.keys())
-        self.policies = [Reinforce(num_arms=len(arm_costs), arm_costs=arm_costs, cost_weighting=cost_weighting, lambd=lambd, nu=nu) for arm_costs in module_info.values()]
+        self.policies = [
+            Reinforce(
+                num_arms=len(arm_costs),
+                arm_costs=arm_costs,
+                cost_weighting=cost_weighting,
+                lambd=lambd,
+                nu=nu
+            )
+            for i, arm_costs in enumerate(module_info.values())
+        ]
 
-    
     def select(self, context, t):
         # Select arm for each policy
         selected_arms = []
@@ -449,10 +467,57 @@ class StructuredReinforce:
         for i, policy in enumerate(self.policies):
             policy.update(context, arm_indices[i], final_r, t)
     
-    def train(self, num_epochs=5, batch_size=8):
+    def train(self, num_epochs, batch_size):
         # Train the network using REINFORCE algorithm
         for policy in self.policies:
             policy.train(num_epochs, batch_size)
+
+
+class ParallizedStructuredReinforce:
+    def __init__(self, module_info, cost_weighting, lambd, nu, lr=0.001):
+        self.num_modules = len(module_info.keys())
+        self.devices = [torch.device(f'cuda:{i % torch.cuda.device_count()}') for i in range(self.num_modules)]
+        self.policies = [
+            Reinforce(
+                num_arms=len(arm_costs),
+                arm_costs=arm_costs,
+                cost_weighting=cost_weighting,
+                lambd=lambd,
+                nu=nu,
+                device=self.devices[i]
+            )
+            for i, arm_costs in enumerate(module_info.values())
+        ]
+
+    def select(self, context, t):
+        # Select arm for each policy
+        selected_arms = []
+        sampled_rewards_list = []
+        true_rewards_list = []
+        for policy in self.policies:
+            selected_arm, sampled_rewards, true_rewards = policy.select(context, t)
+            selected_arms.append(selected_arm)
+            sampled_rewards_list.append(sampled_rewards)
+            true_rewards_list.append(true_rewards)
+        return selected_arms, sampled_rewards_list, true_rewards_list
+
+    def update(self, context, arm_indices, final_r, t):
+        # Update context and reward lists with observed final rewards
+        for i, policy in enumerate(self.policies):
+            policy.update(context, arm_indices[i], final_r, t)
+
+    def train(self, num_epochs, batch_size):
+        # Parallelize training across multiple GPUs using ThreadPoolExecutor
+        with ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(policy.train, num_epochs, batch_size) 
+                for policy in self.policies
+            ]
+            for future in as_completed(futures):
+                try:
+                    future.result()  # Ensure exceptions are caught
+                except Exception as e:
+                    print(f"Training failed for a policy: {e}")
 
 
 

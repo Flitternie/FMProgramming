@@ -95,7 +95,7 @@ class ImageRetrievalDataset(torch.utils.data.Dataset):
 
 
 for cost_weighting in [0, 0.0001, 0.001, 0.01, 0.1]:
-    log = open(f"log_rl_{cost_weighting}.txt", "a+", buffering=1)
+    log = open(f"log_struct_{cost_weighting}.txt", "a+", buffering=1)
     positives, negatives = [], []
     for i in data:
         log.write(f"Query: {i['query']}\n")

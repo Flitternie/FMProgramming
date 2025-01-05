@@ -5,16 +5,9 @@ process(name, *args, **kwargs), where *args and **kwargs are the arguments of th
 """
 
 import abc
-import openai
-import os
 import re
-import timeit
 import torch
-import torchvision
 import warnings
-from PIL import Image
-from collections import Counter
-from itertools import chain
 from joblib import Memory
 from torch import hub
 from torch.nn import functional as F
