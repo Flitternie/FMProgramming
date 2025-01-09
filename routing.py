@@ -129,6 +129,7 @@ class Router():
 class StructuredRouter():
     def __init__(self, routing_info, routing_options, cost_weighting=0):
         self.routing_info = {key: routing_options[key.split("(")[0]] for key in routing_info.keys()} 
+        self.num_arms = reduce(mul, [len(v) for v in self.routing_info.values()])
         self.lamb = 0.0001 # Regularization parameter
         self.nu = 0.1 # Exploration-exploitation trade-off parameter
         self.input_size = 3 # Size of the input features

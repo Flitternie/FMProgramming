@@ -9,8 +9,8 @@ import numpy as np
 from pycocotools.coco import COCO
 
 from execution.router import *
-from execution.models import object_detection_models
-from execution.models import vqa_models
+from execution.modules import object_detection_models
+from execution.modules import vqa_models
 
 # set seed
 def set_seed(seed: int) -> None:

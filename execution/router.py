@@ -61,12 +61,6 @@ class RoutingSystem:
             routing_decisions: Dictionary containing the routing decisions for each function call
             idx: Index of the arm or the group of arms selected by the router
 
-        Notes:
-        
-        # For testing purposes, always return the small model
-        # return {key: 0 for key in self.routing_info.keys()}, 0
-        # For testing purposes, always return the large model
-        # return {key: 1 for key in self.routing_info.keys()}, self.router.num_arms-1
         '''
         routing_decisions, idx = self.router.select(input_image)
         return routing_decisions, idx
@@ -89,7 +83,8 @@ class RoutingSystem:
         tree = ast.parse(self.source)
         if config is not None:
             assert config in [0, 1], "Invalid configuration"
-            routing_decisions = {key: config for key in self.routing_info.keys()}
+            routing_decision = 0 if config == 0 else -1
+            routing_decisions = {key: routing_decision for key in self.routing_info.keys()}
             idx = self.router.num_arms - 1 if config == 1 else 0
         else:
             routing_decisions, idx = self.make_routing_decisions(input)

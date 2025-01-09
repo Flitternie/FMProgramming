@@ -11,7 +11,7 @@ from torchvision.ops import box_iou
 from typing import Union, List
 from word2number import w2n
 
-from execution.models import config, object_detection, image_text_matching, batched_image_text_matching, image_text_classify, vqa, depth, llm
+from execution.modules import config, object_detection, vqa, llm
 from execution.utils import show_single_image, load_json
 
 
@@ -40,13 +40,9 @@ class ImagePatch:
         Returns True if the object specified by object_name is found in the image, and False otherwise.
     verify_property(property: str)->bool
         Returns True if the property is met, and False otherwise.
-    best_text_match(option_list: List[str], prefix: str)->str
-        Returns the string that best matches the image.
-    simple_query(question: str=None)->str
+    query(question: str=None)->str
         Returns the answer to a basic question asked about the image. If no question is provided, returns the answer
         to "What is this?".
-    compute_depth()->float
-        Returns the median depth of the image crop.
     crop(left: int, lower: int, right: int, upper: int)->ImagePatch
         Returns a new ImagePatch object containing a crop of the image at the given coordinates.
     """
@@ -87,7 +83,7 @@ class ImagePatch:
             self.right = image.shape[2]  # width
             self.upper = image.shape[1]  # height
         else:
-            self.cropped_image = image[:, image.shape[1]-upper:image.shape[1]-lower, left:right]
+            self.cropped_image = image[:, lower:upper, left:right]
             self.left = left + parent_left
             self.upper = upper + parent_lower
             self.right = right + parent_left
@@ -107,7 +103,6 @@ class ImagePatch:
         if self.cropped_image.shape[1] == 0 or self.cropped_image.shape[2] == 0:
             raise Exception("ImagePatch has no area")
 
-        self.possible_options = load_json('./vipergpt/resources/possible_options.json')
 
     @property
     def original_image(self):
@@ -133,15 +128,6 @@ class ImagePatch:
         if len(all_object_coordinates) == 0:
             return []
 
-        # threshold = config.ratio_box_area_to_image_area
-        # if threshold > 0:
-        #     area_im = self.width * self.height
-        #     # Coordinates in format: [left, lower, right, upper]
-        #     all_areas = torch.tensor([(coord[2]-coord[0]) * (coord[3]-coord[1]) / area_im
-        #                               for coord in all_object_coordinates])
-        #     mask = all_areas > threshold
-        #     all_object_coordinates = all_object_coordinates[mask]
-
         cropped_images = []
         for coordinates in all_object_coordinates:
             try:
@@ -161,21 +147,12 @@ class ImagePatch:
             object_name = object_name.lower().replace("number", "").strip()
 
             object_name = w2n.word_to_num(object_name)
-            answer = self.simple_query("What number is written in the image (in digits)?", routing=routing)
+            answer = self.query("What number is written in the image (in digits)?", routing=routing)
             return w2n.word_to_num(answer) == object_name
 
         patches = self.find(object_name, routing=routing)
         return len(patches) > 0
 
-    def _score(self, category: str, negative_categories: list, routing: int) -> float:
-        """
-        Returns a binary score for the similarity between the image and the category.
-        The negative categories are used to compare to (score is relative to the scores of the negative categories).
-        """
-        return image_text_matching(self.cropped_image, category, negative_categories=negative_categories, routing=routing)
-
-    def _detect(self, category: str, thresh, negative_categories: list, routing: int) -> bool:
-        return self._score(category, negative_categories, routing) > thresh
 
     def verify_property(self, object_name: str, attribute: str, routing: int) -> bool:
         """Returns True if the object possesses the property, and False otherwise.
@@ -189,38 +166,9 @@ class ImagePatch:
             A string describing the property to be checked.
         """
         name = f"is this {object_name} {attribute} ?"
-        return self.simple_query(name, routing=routing) == "yes"
-        # model = config.verify_property.model
-        # negative_categories = [f"{att} {object_name}" for att in self.possible_options['attributes']]
-        # if model == 'clip':
-        #     return self._detect(name, thresh=config.verify_property.thresh_clip, 
-        #                         negative_categories=negative_categories, model='clip')
-        # elif model == 'tcl':
-        #     return self._detect(name, thresh=config.verify_property.thresh_tcl, model='tcl')
-        # else:  # 'xvlm'
-        #     return self._detect(name, thresh=config.verify_property.thresh_xvlm, 
-        #                         negative_categories=negative_categories, model='xvlm')
+        return "yes" in self.query(name, routing=routing).lower()
 
-    def best_text_match(self, option_list: list[str], prefix: str, routing: int) -> str:
-        """Returns the string that best matches the image.
-        Parameters
-        -------
-        option_list : str
-            A list with the names of the different options
-        prefix : str
-            A string with the prefixes to append to the options
-        """
-        option_list_to_use = option_list
-        if prefix is not None:
-            option_list_to_use = [prefix + " " + option for option in option_list]
-
-        model_name = config.best_match_model
-        image = self.cropped_image
-        text = option_list_to_use
-        selected = image_text_classify(image, text, model_name)
-        return option_list[selected]
-
-    def simple_query(self, question: str, routing: int) -> str:
+    def query(self, question: str, routing: int) -> str:
         """Returns the answer to a basic question asked about the image. If no question is provided, returns the answer
         to "What is this?". The questions are about basic perception, and are not meant to be used for complex reasoning
         or external knowledge.
@@ -230,21 +178,6 @@ class ImagePatch:
             A string describing the question to be asked.
         """
         return vqa(self.cropped_image, question, routing)
-
-    def compute_depth(self, routing: int) -> float:
-        """Returns the median depth of the image crop
-        Parameters
-        ----------
-        Returns
-        -------
-        float
-            the median depth of the image crop
-        """
-        original_image = self.original_image
-        depth_map = depth(original_image)
-        depth_map = depth_map[original_image.shape[1]-self.upper:original_image.shape[1]-self.lower,
-                              self.left:self.right]
-        return depth_map.median()  # Ideally some kind of mode, but median is good enough for now
 
     def crop(self, left: int, lower: int, right: int, upper: int) -> ImagePatch:
         """Returns a new ImagePatch containing a crop of the original image at the given coordinates.
@@ -303,38 +236,12 @@ class ImagePatch:
     def llm_query(self, question: str, routing: int) -> str:
         return llm_query(question, None)
 
-    def print_image(self, size: tuple[int, int] = None):
+    def show(self, size: tuple[int, int] = None):
         show_single_image(self.cropped_image, size)
 
     def __repr__(self):
         return "ImagePatch({}, {}, {}, {})".format(self.left, self.lower, self.right, self.upper)
 
-
-def best_image_match(list_patches: list[ImagePatch], content: List[str], return_index: bool = False) -> \
-        Union[ImagePatch, None]:
-    """Returns the patch most likely to contain the content.
-    Parameters
-    ----------
-    list_patches : List[ImagePatch]
-    content : List[str]
-        the object of interest
-    return_index : bool
-        if True, returns the index of the patch most likely to contain the object
-
-    Returns
-    -------
-    int
-        Patch most likely to contain the object
-    """
-    if len(list_patches) == 0:
-        return None
-
-    model = config.best_match_model
-    scores = batched_image_text_matching(list_patches, content, model=model)
-
-    if return_index:
-        return scores
-    return list_patches[scores]
 
 def distance(patch_a: Union[ImagePatch, float], patch_b: Union[ImagePatch, float]) -> float:
     """
