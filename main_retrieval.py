@@ -6,11 +6,8 @@ import random
 import torch
 import torchvision.transforms as transforms
 import numpy as np
-from pycocotools.coco import COCO
 
 from execution.router import *
-from execution.modules import object_detection_models
-from execution.modules import vqa_models
 
 # set seed
 def set_seed(seed: int) -> None:
@@ -33,6 +30,14 @@ unloader = transforms.Compose([
     transforms.ToTensor(),
 ])
 
+# Load annotations
+with open('./data/retrieval_data.json') as f:
+    data = json.load(f)
+
+# Initialize the COCO dataset for loading images
+img_dir='./data/coco/train2017/{}.jpg'
+
+
 # Function to load and execute a user program from a JSON file
 def load_user_program(code):
     program_str = code
@@ -41,32 +46,14 @@ def load_user_program(code):
     exec(program_str, exec_globals)
     return program_str, exec_globals['execute_command']
 
-def download_image(url):
-    img = PIL.Image.open(urllib.request.urlopen(url))
+def load_image(img_id):
+    img_path = img_dir.format(str(img_id).zfill(12))
+    img = PIL.Image.open(img_path)
     if img.mode != 'RGB':
         return None
     img = transform(img)
     return img
 
-# Initialize the COCO dataset for instance annotations, may take a few seconds
-dataDir='./EfficientAgentBench/coco'
-dataType='train2017'
-annFile='{}/annotations/instances_{}.json'.format(dataDir,dataType)
-coco = COCO(annFile)
-
-# load json
-with open('./EfficientAgentBench/code.json') as f:
-    data = json.load(f)
-
-baseline_positives = {
-    "llava": [],
-    "blip": []
-}
-
-baseline_negatives = {
-    "llava": [],
-    "blip": []
-}
 
 class ImageRetrievalDataset(torch.utils.data.Dataset):
     def __init__(self, postive_images, postive_img_ids, negative_images, negative_img_ids, random_seed=42):
@@ -108,17 +95,19 @@ for cost_weighting in [0, 0.0001, 0.001, 0.01, 0.1]:
 
         print("Start loading images")
 
-        
-        negative_data = torch.load(open(f"./EfficientAgentBench/data/{i['id']}/negative_tensors.pt", "rb"))
-        negative_images = negative_data[1]
-
         positive_image_ids = i['positive_images']
         positive_images = []
         for i in positive_image_ids:
-            img_tensor = download_image(coco.loadImgs(i)[0]['coco_url'])
+            img_tensor = load_image(i)
             positive_images.append(img_tensor)
+
+        negative_image_ids = i['negative_images']
+        negative_images = []
+        for i in tqdm(negative_image_ids):
+            img_tensor = load_image(i)
+            negative_images.append(img_tensor)
         
-        dataset = ImageRetrievalDataset(positive_images, positive_image_ids, negative_images, negative_data[0], random_seed=42)
+        dataset = ImageRetrievalDataset(positive_images, positive_image_ids, negative_images, negative_image_ids, random_seed=42)
         print("Finished loading images")
         pbar = tqdm.tqdm(total=len(dataset))
         for idx in range(len(dataset)):
