@@ -1,7 +1,7 @@
 import ast
 import inspect
 import astor
-from execution.image_patch import ImagePatch
+from execution.image_patch import *
 from routing import Router, StructuredRouter
 
 routing_options = {

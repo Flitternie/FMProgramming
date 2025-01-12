@@ -21,21 +21,21 @@ models_config = {
     "blip2-flan-t5-xl": {
         "model_class": Blip2ForConditionalGeneration,
         "pretrained_model": "Salesforce/blip2-flan-t5-xl",
-        "device": "cuda:2" if torch.cuda.is_available() else "cpu",
+        "device": "cuda:1" if torch.cuda.is_available() else "cpu",
         "batch_size": 2,
     },
     # 385M params params, https://huggingface.co/Salesforce/blip-vqa-base
     "blip-vqa-base": {
         "model_class": BlipForQuestionAnswering,
         "pretrained_model": "Salesforce/blip-vqa-base",
-        "device": "cuda:2" if torch.cuda.is_available() else "cpu",
+        "device": "cuda:1" if torch.cuda.is_available() else "cpu",
         "batch_size": 4,
     },
     # 87.4 params, https://huggingface.co/dandelin/vilt-b32-finetuned-vqa
     "vilt-b32-finetuned-vqa": {
         "model_class": ViltForQuestionAnswering,
         "pretrained_model": "dandelin/vilt-b32-finetuned-vqa",
-        "device": "cuda:2" if torch.cuda.is_available() else "cpu",
+        "device": "cuda:1" if torch.cuda.is_available() else "cpu",
         "batch_size": 4,
     },
 }

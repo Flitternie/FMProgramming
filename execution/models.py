@@ -4,7 +4,7 @@ import torchvision.transforms as transforms
 from agentlego.apis import load_tool
 
 class ObjectDetection():
-    def __init__(self, device):        
+    def __init__(self, device=None, debug=False):        
         self.device = device
         self.image_processor = transforms.ToPILImage()
         self.model_pool = [
@@ -53,10 +53,10 @@ class VisualQuestionAnswering():
         'ofa-base_3rdparty-zeroshot_vqa', 182.24M
         'otter-9b_3rdparty_vqa', 8220.45M
     '''
-    def __init__(self, device):
+    def __init__(self, device=None, debug=False):
         self.device = device
         self.model_pool = [
-            ("ofa-base_3rdparty-zeroshot_vqa", 0),
+            ("ofa-base_3rdparty-zeroshot_vqa", 1),
             ("blip2-opt2.7b_3rdparty-zeroshot_vqa", 1),
         ]
         self.image_processor = transforms.ToPILImage()

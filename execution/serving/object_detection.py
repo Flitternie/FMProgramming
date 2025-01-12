@@ -26,21 +26,21 @@ models_config = {
         "model_id": "google/owlv2-base-patch16-ensemble",
         "device": 0 if torch.cuda.is_available() else -1,
         "batch_size": 3,
-        "threshold": 0.3,
+        "threshold": 0.2,
     },
     # 172M params, https://huggingface.co/IDEA-Research/grounding-dino-tiny
     "grounding-dino-tiny": {
         "model_id": "IDEA-Research/grounding-dino-tiny",
         "device": 0 if torch.cuda.is_available() else -1,
         "batch_size": 2,
-        "threshold": 0.3,
+        "threshold": 0.15,
     },
     # 233M params, https://huggingface.co/IDEA-Research/grounding-dino-base
     "grounding-dino-base": {
         "model_id": "IDEA-Research/grounding-dino-base",
         "device": 0 if torch.cuda.is_available() else -1,
         "batch_size": 4,
-        "threshold": 0.3,
+        "threshold": 0.15,
     },
 }
 

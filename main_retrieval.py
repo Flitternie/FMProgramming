@@ -82,12 +82,13 @@ class ImageRetrievalDataset(torch.utils.data.Dataset):
 
 
 for cost_weighting in [0, 0.0001, 0.001, 0.01, 0.1]:
-    log = open(f"log_struct_{cost_weighting}.txt", "a+", buffering=1)
-    positives, negatives = [], []
+    log = open(f"./logs/log_struct_{cost_weighting}.txt", "a+", buffering=1)
     for i in data:
         log.write(f"Query: {i['query']}\n")
         query = i['query']
         print(query)
+        # hash the query as a unique identifier
+        hased_query = hash(query)
 
         code = i['code']
         program_str, execute_command = load_user_program(code)
@@ -96,16 +97,27 @@ for cost_weighting in [0, 0.0001, 0.001, 0.01, 0.1]:
         print("Start loading images")
 
         positive_image_ids = i['positive_images']
-        positive_images = []
-        for i in positive_image_ids:
-            img_tensor = load_image(i)
-            positive_images.append(img_tensor)
+        # Check if the positive images are already loaded
+        try:
+            positive_images = torch.load(f'./data/positive_images_{hased_query}.pt')
+        except:
+            positive_images = []
+            for i in positive_image_ids:
+                img_tensor = load_image(i)
+                positive_images.append(img_tensor)
+            # save positive image tensors to a file
+            torch.save(positive_images, f'./data/positive_images_{hased_query}.pt')
 
         negative_image_ids = i['negative_images']
-        negative_images = []
-        for i in tqdm(negative_image_ids):
-            img_tensor = load_image(i)
-            negative_images.append(img_tensor)
+        try:
+            negative_images = torch.load(f'./data/negative_images_{hased_query}.pt')
+        except:
+            negative_images = []
+            for i in tqdm(negative_image_ids):
+                img_tensor = load_image(i)
+                negative_images.append(img_tensor)
+            # save negative image tensors to a file
+            torch.save(negative_images, f'./data/negative_images_{hased_query}.pt')
         
         dataset = ImageRetrievalDataset(positive_images, positive_image_ids, negative_images, negative_image_ids, random_seed=42)
         print("Finished loading images")

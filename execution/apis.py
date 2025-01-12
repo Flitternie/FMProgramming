@@ -21,7 +21,7 @@ class ObjectDetection:
             "grounding-dino-base",
         ]
         self.image_processor = transforms.ToPILImage()
-        self.debug = True
+        self.debug = debug
         print("Object Detection API Initialized")
 
     def _parse_detections(self, response):
@@ -54,7 +54,9 @@ class ObjectDetection:
             List[Tuple[int, int, int, int]]: A list of bounding box coordinates (x1, y1, x2, y2).
         """
         try:
-            print(f"Performing Object Detection using {self.model_pool[routing]}")
+            model = self.model_pool[routing]
+            if self.debug:
+                print(f"Performing Object Detection using {self.model_pool[routing]}")
         except IndexError:
             raise IndexError(f"Invalid routing: {routing}, choose from {self.model_pool}")
 
@@ -70,7 +72,8 @@ class ObjectDetection:
         files = {"image": ("image.jpg", buffer, "image/jpeg")}
         data = {"text": object_name}
         endpoint_url = f"{self.server_url}/object_detection/{self.model_pool[routing]}/"
-        print(f"Sending request to {endpoint_url}")
+        if self.debug:
+            print(f"Sending request to {endpoint_url}")
 
         response = requests.post(endpoint_url, files=files, data=data)
 
@@ -111,7 +114,7 @@ class VisualQuestionAnswering:
             "blip2-flan-t5-xl",            
         ]
         self.image_processor = transforms.ToPILImage()
-        self.debug = True
+        self.debug = debug
         print("Visual Question Answering API Initialized")
 
     def forward(self, image, question, routing):
@@ -127,7 +130,9 @@ class VisualQuestionAnswering:
             str: The answer provided by the model.
         """
         try:
-            print(f"Performing VQA using {self.model_pool[routing]}")
+            model = self.model_pool[routing]
+            if self.debug:
+                print(f"Performing VQA using {self.model_pool[routing]}")
         except IndexError:
             raise IndexError(f"Invalid routing: {routing}, choose from {self.model_pool}")
 
@@ -143,7 +148,8 @@ class VisualQuestionAnswering:
         files = {"image": ("image.jpg", buffer, "image/jpeg")}
         data = {"question": question}
         endpoint_url = f"{self.server_url}/vqa/{self.model_pool[routing]}/"
-        print(f"Sending request to {endpoint_url}")
+        if self.debug:
+            print(f"Sending request to {endpoint_url}")
 
         response = requests.post(endpoint_url, files=files, data=data)
 
