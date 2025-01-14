@@ -6,6 +6,7 @@ __pycache__/
 
 # Custom data files
 ~/
+logs/
 data/
 misc/
 logs/
@@ -18,6 +19,7 @@ checkpoints/
 
 *.log
 *.txt
+*.json
 *.ipynb
 *.csv
 *.pkl

@@ -1,14 +1,14 @@
 import ast
 import inspect
 import astor
-from execution.image_patch import *
+from execution.image_patch import ImagePatch, distance
 from routing import Router, StructuredRouter
 
 routing_options = {
-    'find': [30, 90],
-    'exists': [30, 90],
-    'verify_property': [182, 3770],
-    'simple_query': [182, 3770]
+    'find': [155, 172, 233],
+    'exists': [155, 172, 233],
+    'verify_property': [87.4, 385, 3940],
+    'simple_query': [87.4, 385, 3940]
 }
 
 class RoutingSystem:
@@ -118,6 +118,7 @@ class RoutingSystem:
         exec_globals = {
             '__builtins__': __builtins__,  # Provide access to built-ins
             'ImagePatch': ImagePatch,      # Ensure ImagePatch is available during execution
+            'distance': distance,          # Ensure distance function is available during execution
         }
         exec(compiled_code, exec_globals)
         execute_command = exec_globals['execute_command']
