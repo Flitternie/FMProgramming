@@ -83,7 +83,7 @@ class ImagePatch:
             self.right = image.shape[2]  # width
             self.upper = image.shape[1]  # height
         else:
-            self.cropped_image = image[:, lower:upper, left:right]
+            self.cropped_image = image[:, image.shape[1]-upper:image.shape[1]-lower, left:right]
             self.left = left + parent_left
             self.upper = upper + parent_lower
             self.right = right + parent_left

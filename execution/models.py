@@ -56,7 +56,7 @@ class VisualQuestionAnswering():
     def __init__(self, device=None, debug=False):
         self.device = device
         self.model_pool = [
-            ("ofa-base_3rdparty-zeroshot_vqa", 1),
+            ("ofa-base_3rdparty-zeroshot_vqa", 0),
             ("blip2-opt2.7b_3rdparty-zeroshot_vqa", 1),
         ]
         self.image_processor = transforms.ToPILImage()
