@@ -34,14 +34,14 @@ def prepare_data(query_data, hased_query):
         positive_images = torch.load(f'./data/saved_retrieval_imgs/positive_images_{hased_query}.pt', weights_only=False)
     except:
         positive_images = [load_image(i) for i in positive_image_ids]
-        torch.save(positive_images, f'./data/saved_retrieval_imgs/positive_images_{hased_query}.pt', weights_only=False)
+        torch.save(positive_images, f'./data/saved_retrieval_imgs/positive_images_{hased_query}.pt')
 
     negative_image_ids = query_data['negative_images']
     try:
         negative_images = torch.load(f'./data/saved_retrieval_imgs/negative_images_{hased_query}.pt', weights_only=False)
     except:
         negative_images = [load_image(i) for i in tqdm.tqdm(negative_image_ids)]
-        torch.save(negative_images, f'./data/saved_retrieval_imgs/negative_images_{hased_query}.pt', weights_only=False)
+        torch.save(negative_images, f'./data/saved_retrieval_imgs/negative_images_{hased_query}.pt')
     
     return positive_images, positive_image_ids, negative_images, negative_image_ids
 
