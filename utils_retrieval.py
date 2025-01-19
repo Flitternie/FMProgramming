@@ -70,3 +70,15 @@ class ImageRetrievalDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         idx = self.indices[idx]
         return self.images[idx], self.labels[idx], self.img_ids[idx]
+
+class PositiveImageRetrievalDataset(torch.utils.data.Dataset):
+    def __init__(self, positive_images, postive_img_ids, negative_images, negative_img_ids,):
+        self.images = positive_images + negative_images[:15]
+        self.img_ids = postive_img_ids + negative_img_ids[:15]
+        self.labels = [1] * len(positive_images) + [0] * 15
+
+    def __len__(self):
+        return len(self.images)
+    
+    def __getitem__(self, idx):
+        return self.images[idx], self.labels[idx], self.img_ids[idx]

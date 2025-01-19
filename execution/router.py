@@ -5,10 +5,10 @@ from execution.image_patch import ImagePatch, distance
 from routing import Router, StructuredRouter
 
 routing_options = {
-    'find': [30, 90],
-    'exists': [30, 90],
+    'find': [17, 23],
+    'exists': [17, 23],
     'verify_property': [182, 3770],
-    'simple_query': [182, 3770]
+    'query': [182, 3770]
 }
 
 class RoutingSystem:

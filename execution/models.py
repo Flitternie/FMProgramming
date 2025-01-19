@@ -5,19 +5,40 @@ from agentlego.apis import load_tool
 
 class ObjectDetection():
     def __init__(self, device=None, debug=False):        
+        '''
+        model_list:
+            See mmdetection(https://github.com/open-mmlab/mmdetection/) for more details.
+            'glip_atss_swin-t_b_fpn_dyhead_16xb2_ms-2x_funtune_coco', 232M
+            'glip_atss_swin-l_fpn_dyhead_pretrain_mixeddata', 
+            'grounding_dino_swin-t_finetune_16xb2_1x_coco', 172M
+            'grounding_dino_swin-b_finetune_16xb2_1x_coco', 233M
+        '''
         self.device = device
         self.image_processor = transforms.ToPILImage()
+        # "glip_atss_swin-l_fpn_dyhead_pretrain_mixeddata",
+        # "faster-rcnn_x101-64x4d_fpn_ms-3x_coco",
         self.model_pool = [
-            ("glip_atss_swin-t_b_fpn_dyhead_pretrain_obj365", 0),
-            # "glip_atss_swin-l_fpn_dyhead_pretrain_mixeddata",
-            # "faster-rcnn_x101-64x4d_fpn_ms-3x_coco",
-            ("grounding_dino_swin-b_pretrain_mixeddata", 0),
+            {
+                "model": "grounding_dino_swin-t_finetune_16xb2_1x_coco",
+                "device": 0,
+                "threshold": 0.25,
+            },
+            # {
+            #     "model": "glip_atss_swin-t_b_fpn_dyhead_16xb2_ms-2x_funtune_coco",
+            #     "device": 0,
+            #     "threshold": 0.50,
+            # },
+            {
+                "model": "grounding_dino_swin-b_finetune_16xb2_1x_coco",
+                "device": 1,
+                "threshold": 0.25,
+            }
 
         ]
         self.initialize()
 
     def initialize(self):
-        self.models = [load_tool('TextToBbox', model=model[0], device=model[1]) for model in self.model_pool]
+        self.models = [load_tool('TextToBbox', model=model["model"], device=model["device"]) for model in self.model_pool]
         print("Object Detection Models Loaded")
     
     def _parse_coordinates(self, text):
@@ -37,7 +58,7 @@ class ObjectDetection():
         if isinstance(image, torch.Tensor):
             image = self.image_processor(image)
         assert routing < len(self.models), f"Routing should be less than {len(self.models)}"
-        result = self.models[routing](image, object_name, top1=False)
+        result = self.models[routing](image, object_name, threshold=self.model_pool[routing]["threshold"], top1=False)
         coordinates = self._parse_coordinates(result)
         print(f"Detected {len(coordinates)} {object_name} in the image")
         return coordinates
@@ -56,14 +77,20 @@ class VisualQuestionAnswering():
     def __init__(self, device=None, debug=False):
         self.device = device
         self.model_pool = [
-            ("ofa-base_3rdparty-zeroshot_vqa", 0),
-            ("blip2-opt2.7b_3rdparty-zeroshot_vqa", 1),
+            {
+                "name": "ofa-base_3rdparty-zeroshot_vqa",
+                "device": 0,
+            },
+            {
+                "name": "blip2-opt2.7b_3rdparty-zeroshot_vqa",
+                "device": 1,
+            }
         ]
         self.image_processor = transforms.ToPILImage()
         self.initialize()
     
     def initialize(self):
-        self.models = [load_tool('VQA', model=model[0], device=model[1]) for model in self.model_pool]
+        self.models = [load_tool('VQA', model=model["name"], device=model["device"]) for model in self.model_pool]
         print("Visual Question Answering Models Loaded")
     
     def forward(self, image, question, routing):
