@@ -61,6 +61,7 @@ class ImageRetrievalDataset(torch.utils.data.Dataset):
         self.images = self.positive_images + self.negative_images
         self.labels = [1] * len(self.positive_images) + [0] * len(self.negative_images)
         self.img_ids = self.positive_img_ids + self.negative_img_ids
+        assert len(self.images) == len(self.labels) == len(self.img_ids)
         self.indices = list(range(len(self.images)))
         random.shuffle(self.indices)
 
