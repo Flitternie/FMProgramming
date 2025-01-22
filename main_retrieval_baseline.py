@@ -22,8 +22,8 @@ if __name__ == "__main__":
         data = json.load(f)
 
     file_name = "lowest" if config == 0 else "highest"
-    log = open(f"./logs/log_struct_{file_name}.txt", "a+", buffering=1)
-    for i in data[19:]:
+    log = open(f"./logs/log_{file_name}.txt", "a+", buffering=1)
+    for i in data:
         log.write(f"Query: {i['query']}\n")
         query = i['query']
         print(query)
@@ -42,16 +42,17 @@ if __name__ == "__main__":
         pbar = tqdm.tqdm(total=len(dataset))
         for idx in range(len(dataset)):
             image, label, id = dataset[idx]
-            # llava_output = llava(image, f"Does this image contain {query.lower()}?")
-            # blip_output = vqa_models.models[-2](image, f"Does this image contain {query.lower()}?")
             routed_program, routing_decision, routing_idx = routing_system.routing(image, config=config) # config=1 for most expensive routing, config=0 for cheapest routing
             try:
-                output = routed_program(image)
+                output, execution_counter, execution_info = execute_routed_program(routed_program, image)
             except Exception as e:
-                output = -1
+                print(e)
+                log.write(f"Img: {id}; Label: {label}; ViperGPT: {e}; Routing: {routing_idx};\n")
+                pbar.update(1)
+                continue
+            cost = execution_cost(execution_counter)
 
-            log.write(f"Img: {id}; Label: {label}; ViperGPT: {output}; Routing: {routing_idx};\n")
-            # log.write(f"Img: {id}; Label: 1; LLAVA: {llava_output}; BLIP: {blip_output}; ViperGPT: {output};\n")    
+            log.write(f"Img: {id}; Label: {label}; ViperGPT: {output}; Routing: {routing_idx}; Cost: {cost};\n")
             pbar.update(1)    
         pbar.close()
 

@@ -38,7 +38,7 @@ class ImagePatch:
         image matching the object_name.
     exists(object_name: str)->bool
         Returns True if the object specified by object_name is found in the image, and False otherwise.
-    verify_property(property: str)->bool
+    verify_property(object_name: str, attribute: str)->bool
         Returns True if the property is met, and False otherwise.
     query(question: str=None)->str
         Returns the answer to a basic question asked about the image. If no question is provided, returns the answer
@@ -234,7 +234,7 @@ class ImagePatch:
         return self.left <= right and self.right >= left and self.lower <= upper and self.upper >= lower
 
     def llm_query(self, question: str, routing: int) -> str:
-        return llm_query(question, None)
+        return llm(question, None)
 
     def show(self, size: tuple[int, int] = None):
         show_single_image(self.cropped_image, size)

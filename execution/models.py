@@ -79,11 +79,11 @@ class VisualQuestionAnswering():
         self.model_pool = [
             {
                 "name": "ofa-base_3rdparty-zeroshot_vqa",
-                "device": 0,
+                "device": 1,
             },
             {
                 "name": "blip2-opt2.7b_3rdparty-zeroshot_vqa",
-                "device": 1,
+                "device": 0,
             }
         ]
         self.image_processor = transforms.ToPILImage()

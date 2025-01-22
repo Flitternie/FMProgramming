@@ -19,13 +19,6 @@ This file contains the implementation of the following bandit algorithms:
 4. Contextual Bandits (ContextualBandit)
 '''
 
-# Check if CUDA (GPU) is available and set the device accordingly
-if torch.cuda.is_available():  
-    dev = "cuda:0" 
-else:  
-    dev = "cpu" 
-device = torch.device(dev)
-
 
 # Multi-facet Contextual Bandit algorithm, from paper "Multi-facet Contextual Bandits: A Neural Network Perspective", original code at https://github.com/banyikun/KDD2021_MuFasa
 class MuFasa:
@@ -336,7 +329,7 @@ class Reinforce:
         self.lambd = lambd
         self.nu = nu
         self.lr = lr
-        
+
         # Model Initialization
         self.model = CNN(num_arms).to(self.device)
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr)
@@ -396,6 +389,10 @@ class Reinforce:
         self.reward_list.append(final_r)
 
     def train(self, num_epochs, batch_size):
+        assert len(self.context_list) == len(self.arm_list) == len(self.reward_list), "Training data mismatch"
+        if len(self.reward_list) == 0:
+            return -1
+
         self.model.train()  # Set model to training mode
         
         for epoch in range(num_epochs):
@@ -501,10 +498,11 @@ class ParallizedStructuredReinforce:
             true_rewards_list.append(true_rewards)
         return selected_arms, sampled_rewards_list, true_rewards_list
 
-    def update(self, context, arm_indices, final_r, t):
+    def update(self, context, arm_indices, final_r, reward_mapping, t):
         # Update context and reward lists with observed final rewards
         for i, policy in enumerate(self.policies):
-            policy.update(context, arm_indices[i], final_r, t)
+            if reward_mapping[i] == 1:
+                policy.update(context, arm_indices[i], final_r, t)
 
     def train(self, num_epochs, batch_size):
         # Parallelize training across multiple GPUs using ThreadPoolExecutor

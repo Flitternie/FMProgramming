@@ -160,7 +160,7 @@ class StructuredRouter():
         selected_arms, _, _ = self.algo.select(input_feature, self.t) 
         return {key: selected_arms[i] for i, key in enumerate(self.routing_info.keys())}, selected_arms
     
-    def update(self, context, arm_indices, reward):
+    def update(self, context, arm_indices, reward, reward_mapping):
         '''
         This function updates the routing algorithm based on the reward received.
 
@@ -171,6 +171,6 @@ class StructuredRouter():
             
         '''
         self.t += 1
-        self.algo.update(np.array(context), arm_indices, reward, self.t)
+        self.algo.update(np.array(context), arm_indices, reward, reward_mapping, self.t)
         if self.t % 64 == 0:
             self.algo.train(num_epochs=5, batch_size=16)

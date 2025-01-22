@@ -1,6 +1,7 @@
 import PIL
 import random
 import tqdm
+import hashlib
 import torch
 import torchvision.transforms as transforms
 
@@ -27,6 +28,9 @@ def load_image(img_id):
         return None
     img = transform(img)
     return img
+
+def hash_query(query):
+    return int(hashlib.sha512(query.encode('utf-8')).hexdigest(), 16)
 
 def prepare_data(query_data, hased_query):
     positive_image_ids = query_data['positive_images']
