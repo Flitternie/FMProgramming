@@ -20,6 +20,11 @@ class ObjectDetection:
             "grounding-dino-tiny",
             "grounding-dino-base",
         ]
+        self.model_thresholds = [
+            0.3,
+            0.2,
+            0.2,
+        ]
         self.image_processor = transforms.ToPILImage()
         self.debug = debug
         print("Object Detection API Initialized")
@@ -70,7 +75,7 @@ class ObjectDetection:
 
         # Send the request to the API
         files = {"image": ("image.jpg", buffer, "image/jpeg")}
-        data = {"text": object_name}
+        data = {"text": object_name, "threshold": self.model_thresholds[routing]}
         endpoint_url = f"{self.server_url}/object_detection/{self.model_pool[routing]}/"
         if self.debug:
             print(f"Sending request to {endpoint_url}")
@@ -80,7 +85,8 @@ class ObjectDetection:
         if response.status_code == 200:
             result = response.json()
             coordinates = self._parse_detections(result)
-            print(f"Detected {len(coordinates)} {object_name}(s) in the image")
+            if self.debug:
+                print(f"Detected {len(coordinates)} {object_name}(s) in the image")
 
             if self.debug == True:
                 detections = result["detections"]

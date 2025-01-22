@@ -234,7 +234,7 @@ class ImagePatch:
         return self.left <= right and self.right >= left and self.lower <= upper and self.upper >= lower
 
     def llm_query(self, question: str, routing: int) -> str:
-        return llm(question, None)
+        return llm(question, routing)
 
     def show(self, size: tuple[int, int] = None):
         show_single_image(self.cropped_image, size)

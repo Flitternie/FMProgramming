@@ -24,23 +24,20 @@ models_config = {
     # 155M params, https://huggingface.co/google/owlv2-base-patch16-ensemble
     "owlv2-base-patch16-ensemble": {
         "model_id": "google/owlv2-base-patch16-ensemble",
-        "device": 0 if torch.cuda.is_available() else -1,
-        "batch_size": 3,
-        "threshold": 0.2,
+        "device": "cuda:1" if torch.cuda.is_available() else "cpu",
+        "batch_size": 4,
     },
     # 172M params, https://huggingface.co/IDEA-Research/grounding-dino-tiny
     "grounding-dino-tiny": {
         "model_id": "IDEA-Research/grounding-dino-tiny",
-        "device": 0 if torch.cuda.is_available() else -1,
-        "batch_size": 2,
-        "threshold": 0.15,
+        "device": "cuda:1" if torch.cuda.is_available() else "cpu",
+        "batch_size": 4,
     },
     # 233M params, https://huggingface.co/IDEA-Research/grounding-dino-base
     "grounding-dino-base": {
         "model_id": "IDEA-Research/grounding-dino-base",
-        "device": 0 if torch.cuda.is_available() else -1,
+        "device": "cuda:1" if torch.cuda.is_available() else "cpu",
         "batch_size": 4,
-        "threshold": 0.15,
     },
 }
 
@@ -67,7 +64,6 @@ async def batch_processor(model_name):
 
     while True:
         try:
-            logger.info(f"Waiting for requests in {model_name}")
             requests = []
             time_limit = 5  # Set time limit for batching in seconds
             start_time = asyncio.get_event_loop().time()
@@ -82,19 +78,19 @@ async def batch_processor(model_name):
                 except asyncio.TimeoutError:
                     break
 
-            logger.info(f"Processing {len(requests)} requests for {model_name}")
-
             if requests:
+                logger.info(f"Processing {len(requests)} requests for {model_name}")
                 # Extract images and texts in batch
                 images = [req[0]["image"] for req in requests]
                 texts = [req[0]["text"] for req in requests]
+                thresholds = [req[0]["threshold"] for req in requests]
 
                 try:
                     # Process the batch in a single pipeline call
                     batch_results = detection_pipeline(
                         images,
                         candidate_labels=texts,
-                        threshold=config["threshold"],
+                        threshold=thresholds[0],
                     )
 
                     # Prepare JSON responses for each request
@@ -141,7 +137,7 @@ for model_name in device_model_map.keys():
     asyncio.create_task(batch_processor(model_name))
 
 @app.post("/object_detection/{model_name}/")
-async def object_detection(model_name: str, image: UploadFile, text: str = Form(...)):
+async def object_detection(model_name: str, image: UploadFile, text: str = Form(...), threshold: float = Form(0.5)):
     if model_name not in device_model_map:
         logger.error(f"Model {model_name} not found")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found.")
@@ -149,9 +145,9 @@ async def object_detection(model_name: str, image: UploadFile, text: str = Form(
     try:
         content = await image.read()
         image = Image.open(BytesIO(content)).convert("RGB")
-        request_data = {"image": image, "text": text}
+        request_data = {"image": image, "text": text, "threshold": threshold}
 
-        logger.info(f"Received request for model {model_name} with text: {text}")
+        logger.info(f"Received request for model {model_name} with text: {text}, threshold: {threshold}")
 
         response_future = asyncio.Future()
         await device_model_map[model_name]["request_queue"].put((request_data, response_future))

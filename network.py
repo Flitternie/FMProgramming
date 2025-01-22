@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
 
 '''
 This file contains the neural network classes for the bandit modules and the aggregation network. 
@@ -21,7 +22,7 @@ class MLP(nn.Module):
         return transformed_context
 
 
-class CNN(nn.Module):
+class LegacyCNN(nn.Module):
     def __init__(self, num_classes):
         super(CNN, self).__init__()
         self.feature_hidden_size = 256
@@ -51,6 +52,18 @@ class CNN(nn.Module):
         x = F.relu(self.fc1(x))    # Shape: [batch_size, 256]
         x = self.fc2(x)            # Shape: [batch_size, num_classes]
         return x
+    
+class CNN(nn.Module):
+    def __init__(self, num_classes, pretrained=False):
+        super(CNN, self).__init__()
+        # Load pretrained ResNet-18 model
+        self.resnet = models.resnet18(pretrained=pretrained)
+        # Modify the last fully connected layer
+        in_features = self.resnet.fc.in_features
+        self.resnet.fc = nn.Linear(in_features, num_classes)
+    
+    def forward(self, x):
+        return self.resnet(x)
 
 
 class ModuleNetwork(nn.Module):

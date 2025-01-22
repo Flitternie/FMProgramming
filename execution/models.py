@@ -1,6 +1,7 @@
 import re
 import torch
 import torchvision.transforms as transforms
+from openai import OpenAI
 from agentlego.apis import load_tool
 
 class ObjectDetection():
@@ -55,9 +56,9 @@ class ObjectDetection():
         return coordinates
     
     def forward(self, image, object_name, routing):
+        assert routing < len(self.models), f"Routing should be less than {len(self.models)}"
         if isinstance(image, torch.Tensor):
             image = self.image_processor(image)
-        assert routing < len(self.models), f"Routing should be less than {len(self.models)}"
         result = self.models[routing](image, object_name, threshold=self.model_pool[routing]["threshold"], top1=False)
         coordinates = self._parse_coordinates(result)
         print(f"Detected {len(coordinates)} {object_name} in the image")
@@ -94,8 +95,42 @@ class VisualQuestionAnswering():
         print("Visual Question Answering Models Loaded")
     
     def forward(self, image, question, routing):
+        assert routing < len(self.models), f"Routing should be less than {len(self.models)}"
         if isinstance(image, torch.Tensor):
             image = self.image_processor(image)
         return self.models[routing](image, question)
     
+class LanguageModel():
+    def __init__(self, device=None, debug=False):      
+        self.model_pool = [
+            {
+                "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                "prompt": "You are a helpful assistant. You need to answer the question and keep it as short and simple as possible, without any explainations. For example, if the question is about the capital of France, you answer 'Paris'. If the question is about a certain number, return only the number.",
+            },
+            {
+                "model": "meta-llama/Llama-3.3-70B-Instruct",
+                "prompt": "You are a helpful assistant. You need to answer the question and keep it as short and simple as possible, without any explainations. For example, if the question is about the capital of France, you answer 'Paris'. If the question is about a certain number, return only the number.",
+            }
+        ]
+        self.initialize()
 
+    def initialize(self):
+        # load api_key from the file
+        self.api_key = open("api.key", "r").read()
+        self.openai = OpenAI(
+            api_key=self.api_key,
+            base_url="https://api.deepinfra.com/v1/openai",
+        )
+    
+    def forward(self, query, routing):
+        assert routing < len(self.model_pool), f"Routing should be less than {len(self.model_pool)}"
+        completion = self.openai.chat.completions.create(
+            model=self.model_pool[routing]["model"],
+            messages=[
+                {"role": "system", "content": self.model_pool[routing]["prompt"]},
+                {"role": "user", "content": query}
+            ],
+            temperature=0,
+            seed=42,
+        )
+        return completion.choices[0].message.content

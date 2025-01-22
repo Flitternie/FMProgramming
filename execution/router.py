@@ -6,14 +6,15 @@ from execution.image_patch import ImagePatch, distance
 from routing import Router, StructuredRouter
 
 routing_options = {
-    'find': [17, 23],
-    'exists': [17, 23],
+    'find': [172, 233],
+    'exists': [172, 233],
     'verify_property': [182, 3770],
-    'query': [182, 3770]
+    'query': [182, 3770],
+    'llm_query': [8000, 70000]
 }
 
-tracked_methods = ["find", "exists", "verify_property", "query"]
-tracked_functions = ["llm"] 
+tracked_methods = ["find", "exists", "verify_property", "query", "llm_query"]
+tracked_functions = [] 
 
 # Dictionary to store counts separately for method names and routing argument values
 method_call_tracker = {}

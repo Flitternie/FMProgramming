@@ -26,6 +26,7 @@ checkpoints/
 *.png
 *.lock
 *.db
+*.key
 
 # C extensions
 *.so
