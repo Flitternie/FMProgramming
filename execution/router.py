@@ -18,13 +18,13 @@ tracked_functions = ["llm"]
 # Dictionary to store counts separately for method names and routing argument values
 method_call_tracker = {}
 function_call_tracker = {}
-execution_info = set()  # Stores (method_name, query) tuples
+execution_trace = set()  # Stores (method_name, query) tuples
 
 def count_method_calls(func):
     """Decorator to count method calls separately based on method name and routing argument."""
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        global method_call_tracker, execution_info
+        global method_call_tracker, execution_trace
         method_name = func.__name__  # Get the method name
         routing_value = kwargs.get("routing", None)  # Get 'routing' arg if available
 
@@ -38,7 +38,7 @@ def count_method_calls(func):
 
         # Store executed queries for verification
         if query:
-            execution_info.add(f'''{method_name}('{query}')''')
+            execution_trace.add(f'''{method_name}('{query}')''')
 
         return func(*args, **kwargs)
 
@@ -61,7 +61,7 @@ def count_function_calls(func):
 
         # Store executed queries for verification
         if query:
-            execution_info.add(f'''{function_name}('{query}')''')
+            execution_trace.add(f'''{function_name}('{query}')''')
 
         return func(*args, **kwargs)
 
@@ -103,12 +103,12 @@ def execute_routed_program(routed_program, image):
         image: The input image for processing.
         specific_check: Tuple (method_name, query) to verify if it was executed.
     """
-    global method_call_tracker, function_call_tracker, execution_info
+    global method_call_tracker, function_call_tracker, execution_trace
 
     # Reset counters before execution
     method_call_tracker.clear()
     function_call_tracker.clear()
-    execution_info.clear()
+    execution_trace.clear()
 
     # Execute the routed program
     output = routed_program(image)
@@ -122,20 +122,20 @@ def execute_routed_program(routed_program, image):
     for (function_name, routing_value), count in function_call_tracker.items():
         execution_counter.append((function_name, routing_value, count))
     
-    return output, execution_counter, execution_info
+    return output, execution_counter, execution_trace
 
 
-def check_execution(execution_info, function_calls):
+def check_execution(execution_trace, function_calls):
     """
     Check if a specific method + query combination was executed during the program run.
 
     Args:
-        execution_info: Set of executed method + query combinations.
+        execution_trace: Set of executed method + query combinations.
         function_calls: List of method + query combinations to check.
     """
     execution_flag = []
     for function_call in function_calls:
-        if function_call in execution_info:
+        if function_call in execution_trace:
             execution_flag.append(1)
         else:
             execution_flag.append(0)

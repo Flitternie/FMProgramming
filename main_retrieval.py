@@ -25,7 +25,7 @@ if __name__ == "__main__":
         query = i['query']
         print(query)
         # hash the query as a unique identifier
-        hased_query = hased_query(query)
+        hased_query = hash_query(query)
 
         code = i['code']
         program_str, execute_command = load_user_program(code)
@@ -41,14 +41,14 @@ if __name__ == "__main__":
             image, label, id = dataset[idx]
             routed_program, routing_decision, routing_idx = routing_system.routing(image)
             try:
-                output, execution_counter, execution_info = execute_routed_program(routed_program, image)
+                output, execution_counter, execution_trace = execute_routed_program(routed_program, image)
             except Exception as e:
                 print(e)
                 log.write(f"Img: {id}; Label: {label}; ViperGPT: {e}; Routing: {routing_idx};\n")
                 pbar.update(1)
                 continue
             
-            reward_mapping = check_execution(execution_info, routing_system.router.routing_info)
+            reward_mapping = check_execution(execution_trace, routing_system.router.routing_info)
             cost = execution_cost(execution_counter)
 
             if int(label) == 1: # Positive, Minority class
