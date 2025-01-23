@@ -4,7 +4,7 @@ from functools import reduce
 from bandit import ContextualBandit, Reinforce, StructuredReinforce, ParallizedStructuredReinforce
 
 class Router():
-    def __init__(self, routing_info, routing_options, cost_weighting=0):
+    def __init__(self, routing_info, routing_options, cost_weighting=0, config=None):
         self.routing_info = {key: len(routing_options[key.split("(")[0]]) for key in routing_info.keys()}
         self.num_arms = reduce(mul, [v for v in self.routing_info.values()])
         self.arm_costs = self.compute_costs(self.num_arms, routing_info, routing_options)
@@ -14,15 +14,19 @@ class Router():
         self.hidden_size = 128 # Hidden size of the neural network
         self.cost_weighting = cost_weighting # Cost weighting parameter
         print("Cost weighting: ", self.cost_weighting)
-        self.initialize()
+        self.initialize(config)
         self.t = 0
     
-    def initialize(self):
+    def initialize(self, config):
         '''
         This function initializes the routing algorithm.
         '''
-        # self.algo = ContextualBandit(self.num_arms, self.arm_costs, self.cost_weighting, self.lamb, self.nu)
-        self.algo = Reinforce(self.num_arms, self.arm_costs, self.cost_weighting, self.lamb, self.nu)
+        if config == "bandit":
+            self.algo = ContextualBandit(self.num_arms, self.arm_costs, self.cost_weighting, self.lamb, self.nu)
+        elif config == "reinforce":
+            self.algo = Reinforce(self.num_arms, self.arm_costs, self.cost_weighting, self.lamb, self.nu)
+        else:
+            raise ValueError("Invalid configuration, valid options: bandit, reinforce")
 
     def compute_costs(self, num_arms, routing_info, routing_options):
         '''
@@ -111,7 +115,7 @@ class Router():
         selected_arms = self.idx_to_arms(arm_idx)
         return {key: selected_arms[i] for i, key in enumerate(self.routing_info.keys())}, arm_idx
     
-    def update(self, context, arm_idx, reward):
+    def update(self, context, arm_idx, reward, reward_mapping=None):
         '''
         This function updates the routing algorithm based on the reward received.
 

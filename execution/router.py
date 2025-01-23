@@ -117,7 +117,7 @@ def execute_routed_program(routed_program, image):
         output = routed_program(image)
     except Exception as e:
         warnings.warn(f"Error executing the routed program: {e}")
-        output = None
+        output = e
 
     execution_counter = []
 
@@ -167,7 +167,7 @@ wrap_specific_functions(tracked_functions)
 
 
 class RoutingSystem:
-    def __init__(self, func, source, cost_weighting, struct=True):
+    def __init__(self, func, source, cost_weighting, config="struct_reinforce"):
         '''
         This class initializes the routing system for the user program.
 
@@ -188,9 +188,9 @@ class RoutingSystem:
         self.source = source
         self.cost_weighting = cost_weighting
         self.function_calls = self.analyze_user_program()
-        self.initialize(self.function_calls, struct)
+        self.initialize(self.function_calls, config)
     
-    def initialize(self, function_calls, struct):
+    def initialize(self, function_calls, config):
         # Initialize routing decisions based on function calls in the user program
         '''
         This function initializes the routing decisions based on the function calls in the user program.
@@ -200,10 +200,12 @@ class RoutingSystem:
 
         '''
         self.routing_info = {call['identifier']: 0 for call in function_calls}  # Default routing to 0 (small model)
-        if struct:
+        if config == "struct_reinforce":
             self.router = StructuredRouter(self.routing_info, routing_options, self.cost_weighting)
+        elif config == "reinforce" or config == "bandit":
+            self.router = Router(self.routing_info, routing_options, self.cost_weighting, config)
         else:
-            self.router = Router(self.routing_info, routing_options, self.cost_weighting)
+            raise ValueError("Invalid configuration, valid options: struct_reinforce, reinforce, bandit")
     
     def make_routing_decisions(self, input_image) -> dict:
         '''

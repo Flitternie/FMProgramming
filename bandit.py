@@ -199,10 +199,11 @@ class UCB_ALP:
 
 class ContextualBandit:
     def __init__(self, num_arms, arm_costs, cost_weighting, lambd=1, nu=0.1):
+        self.device = device if device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_arms = num_arms
         self.arm_costs = arm_costs
         self.cost_weighting = cost_weighting
-        self.model = CNN(num_arms).to(device)
+        self.model = CNN(num_arms).to(self.device)
         self.lambd = lambd
         self.nu = nu
         self.lr = 0.001
