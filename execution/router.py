@@ -2,6 +2,7 @@ import ast
 import inspect
 import astor
 import functools
+import warnings
 from execution.image_patch import ImagePatch, distance
 from routing import Router, StructuredRouter
 
@@ -112,7 +113,11 @@ def execute_routed_program(routed_program, image):
     execution_trace.clear()
 
     # Execute the routed program
-    output = routed_program(image)
+    try:
+        output = routed_program(image)
+    except Exception as e:
+        warnings.warn(f"Error executing the routed program: {e}")
+        output = None
 
     execution_counter = []
 
