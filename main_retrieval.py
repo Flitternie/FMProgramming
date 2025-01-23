@@ -43,10 +43,16 @@ if __name__ == "__main__":
             try:
                 output, execution_counter, execution_trace = execute_routed_program(routed_program, image)
             except Exception as e:
-                print(e)
+                warnings.warn(e)
                 log.write(f"Img: {id}; Label: {label}; ViperGPT: {e}; Routing: {routing_idx};\n")
                 pbar.update(1)
                 continue
+            
+            if output is None:
+                output = False
+                log.write(f"Img: {id}; Label: {label}; ViperGPT: {output}; Routing: {routing_idx}; Cost: {cost};\n")
+                pbar.update(1)   
+                continue 
             
             reward_mapping = check_execution(execution_trace, routing_system.router.routing_info)
             cost = execution_cost(execution_counter)
