@@ -12,7 +12,7 @@ def main(cost_weighting):
     with open('./data/retrieval_data.json') as f:
         data = json.load(f)
 
-    log = open(f"./logs/log_bandit_{cost_weighting}.txt", "a+", buffering=1)
+    log = open(f"./logs/baseline_bandit_{cost_weighting}.txt", "a+", buffering=1)
     for i in data:
         log.write(f"Query: {i['query']}\n")
         query = i['query']
@@ -22,7 +22,7 @@ def main(cost_weighting):
 
         code = i['code']
         program_str, execute_command = load_user_program(code)
-        routing_system = RoutingSystem(execute_command, program_str, cost_weighting)
+        routing_system = RoutingSystem(execute_command, program_str, cost_weighting, config="bandit")
 
         print("Start loading images")
         positive_images, positive_image_ids, negative_images, negative_image_ids = prepare_data(i, hased_query)

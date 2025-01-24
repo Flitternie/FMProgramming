@@ -199,7 +199,7 @@ class UCB_ALP:
 
 class ContextualBandit:
     def __init__(self, num_arms, arm_costs, cost_weighting, lambd=1, nu=0.1):
-        self.device = device if device else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.num_arms = num_arms
         self.arm_costs = arm_costs
         self.cost_weighting = cost_weighting
@@ -208,11 +208,7 @@ class ContextualBandit:
         self.nu = nu
         self.lr = 0.001
 
-        # Arm embeddings
-        # self.arm_embeddings = nn.Embedding(self.num_arms, self.model.feature_hidden_size).to(next(self.model.parameters()).device)
-        
         total_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        # total_params = sum(p.numel() for p in self.arm_embeddings.parameters() if p.requires_grad)
         self.U = lambd * torch.ones((total_params,)).to(next(self.model.parameters()).device)
 
         self.optimizer = optim.AdamW(list(self.model.parameters()), lr=self.lr)
@@ -226,9 +222,10 @@ class ContextualBandit:
         self.reward_list = []
     
     def select(self, context, t):
-        # Convert context to tensors and get transformed context from model
-        context_tensor = torch.tensor(context).float().to(next(self.model.parameters()).device)
-        model_outputs = self.model(context_tensor)
+        # Convert context to tensor
+        context_tensor = torch.tensor(context, dtype=torch.float32, device=self.device)
+        context_tensor = context_tensor.unsqueeze(0)  # Add batch dimension
+        model_outputs = self.model(context_tensor).squeeze(0)
         
         g_list = []  # Gradients list
         sampled_rewards = []  # Sampled rewards
@@ -236,19 +233,14 @@ class ContextualBandit:
         
         # Compute the sigma and sampled reward for each arm combination using gradient-based Thompson Sampling
         for arm_index in range(self.num_arms):
-            # arm_embedding = self.arm_embeddings(torch.tensor([arm_index]).to(next(self.model.parameters()).device))
-            # reward_prediction = torch.dot(transformed_context.flatten(), arm_embedding.flatten())
             reward_prediction = model_outputs[arm_index]
 
             # Calculate gradient for Thompson Sampling
-            # self.arm_embeddings.zero_grad()
             self.model.zero_grad()
             reward_prediction.backward(retain_graph=True)
 
             # Collect gradients
-            gradients = torch.cat([p.grad.flatten().detach() for p in 
-                                #    list(self.arm_embeddings.parameters()) +
-                                   list(self.model.parameters())])
+            gradients = torch.cat([p.grad.flatten().detach() for p in list(self.model.parameters())])
             
             # Sample from Normal distribution based on gradient norms for Thompson Sampling
             sigma = torch.sqrt(self.lambd * torch.sum(gradients * gradients / self.U))
@@ -270,7 +262,7 @@ class ContextualBandit:
         self.reward_list.append(final_r)
     
     def train(self, num_epochs=5, batch_size=8):
-        # Train the network on observed data
+         # Train the network on observed data
         index = np.arange(len(self.reward_list))
         context_list = self.context_list
         arm_list = self.arm_list
@@ -295,14 +287,14 @@ class ContextualBandit:
                 for i in range(batch_size):
                     idx = index[min(batch_idx * batch_size + i, length - 1)]
                     context = context_list[idx]
-                    context = torch.from_numpy(context).float().to(next(self.model.parameters()).device)
+                    context = torch.tensor(np.array(context), dtype=torch.float32, device=self.device)
+                    if context.dim() == 3:
+                        context = context.unsqueeze(0)
                     model_outputs = self.model(context)
                     r = reward_list[idx]
                     arm = arm_list[idx]
         
-                    # arm_embedding = self.arm_embeddings(torch.tensor([arm]).to(next(self.model.parameters()).device))
-                    # predicted_reward = torch.dot(transformed_context.flatten(), arm_embedding.flatten())
-                    predicted_reward = model_outputs[arm]
+                    predicted_reward = model_outputs.squeeze(0)[arm]
                     
                     predicted_reward = predicted_reward - self.arm_costs[arm] * self.cost_weighting
 
