@@ -3,6 +3,7 @@ import torch
 import torchvision.transforms as transforms
 from openai import OpenAI
 from agentlego.apis import load_tool
+from execution.utils import convert_coco
 
 class ObjectDetection():
     def __init__(self, device=None, debug=False):        
@@ -19,31 +20,46 @@ class ObjectDetection():
         # "glip_atss_swin-l_fpn_dyhead_pretrain_mixeddata",
         # "faster-rcnn_x101-64x4d_fpn_ms-3x_coco",
         self.model_pool = [
-            {
-                "model": "grounding_dino_swin-t_finetune_16xb2_1x_coco",
-                "device": 0,
-                "threshold": 0.25,
-            },
             # {
-            #     "model": "glip_atss_swin-t_b_fpn_dyhead_16xb2_ms-2x_funtune_coco",
+            #     "type": "ObjectDetection",
+            #     "model": "rtmdet_tiny_8xb32-300e_coco",
             #     "device": 0,
-            #     "threshold": 0.50,
+            #     "threshold": 0.1,
+            #     "cost": 5
+            # },
+            # {
+            #     "type": "TextToBbox",
+            #     "model": "grounding_dino_swin-b_finetune_16xb2_1x_coco",
+            #     "device": 1,
+            #     "threshold": 0.25,
+            #     "cost": 233
             # },
             {
-                "model": "grounding_dino_swin-b_finetune_16xb2_1x_coco",
+                "type": "TextToBbox",
+                "model": "glip_atss_swin-t_b_fpn_dyhead_pretrain_obj365",
+                "device": 0,
+                "threshold": 0.5,
+                "cost": 231
+            },
+            {
+                "type": "TextToBbox",
+                "model": "glip_atss_swin-l_fpn_dyhead_16xb2_ms-2x_funtune_coco",
                 "device": 1,
-                "threshold": 0.25,
+                "threshold": 0.6,
+                "cost": 430
             }
 
         ]
         self.initialize()
 
     def initialize(self):
-        self.models = [load_tool('TextToBbox', model=model["model"], device=model["device"]) for model in self.model_pool]
+        self.models = [load_tool(model["type"], model=model["model"], device=model["device"]) for model in self.model_pool]
+        self._count_parameters()
         print("Object Detection Models Loaded")
     
     def _parse_coordinates(self, text):
         coordinates = []
+        scores = []
         text = text.split("\n")
         for t in text:
             # Regular expression to match the pattern
@@ -53,16 +69,38 @@ class ObjectDetection():
             if match:
                 x1, y1, x2, y2, score = map(int, match.groups())
                 coordinates.append((x1, y1, x2, y2))
-        return coordinates
+                scores.append(score)
+        return coordinates, scores
     
+    def _count_parameters(self):
+        for idx in range(len(self.models)):
+            self.models[idx].setup()
+            num_params = sum(p.numel() for p in self.models[idx]._inferencer.model.parameters())
+            self.model_pool[idx]["cost"] = num_params // 1e6
+            print(f"Model {idx} has {num_params // 1e6}M parameters")
+
     def forward(self, image, object_name, routing):
         assert routing < len(self.models), f"Routing should be less than {len(self.models)}"
         if isinstance(image, torch.Tensor):
             image = self.image_processor(image)
-        result = self.models[routing](image, object_name, threshold=self.model_pool[routing]["threshold"], top1=False)
-        coordinates = self._parse_coordinates(result)
+
+        if self.model_pool[routing]["type"] == "TextToBbox":
+            result = self.models[routing](image, object_name)
+            # coordinates, scores = self._parse_coordinates(result)
+            result = result[result.scores > self.model_pool[routing]["threshold"]]
+            coordinates, scores = result.bboxes, result.scores
+
+        elif self.model_pool[routing]["type"] == "ObjectDetection":
+            result = self.models[routing](image)
+            result = result[result.scores > self.model_pool[routing]["threshold"]]
+            object_name = convert_coco(object_name)
+            object_name_idx = self.models[routing].classes.index(object_name) if object_name in self.models[routing].classes else -1
+            result = result[result.labels == object_name_idx]
+            coordinates, scores = result.bboxes.tolist(), result.scores.tolist()
+        
         print(f"Detected {len(coordinates)} {object_name} in the image")
-        return coordinates
+        return coordinates, scores
+
 
 class VisualQuestionAnswering():
     '''
@@ -81,10 +119,12 @@ class VisualQuestionAnswering():
             {
                 "name": "ofa-base_3rdparty-zeroshot_vqa",
                 "device": 1,
+                "cost": 182
             },
             {
                 "name": "blip2-opt2.7b_3rdparty-zeroshot_vqa",
                 "device": 0,
+                "cost": 3770
             }
         ]
         self.image_processor = transforms.ToPILImage()
@@ -92,7 +132,15 @@ class VisualQuestionAnswering():
     
     def initialize(self):
         self.models = [load_tool('VQA', model=model["name"], device=model["device"]) for model in self.model_pool]
+        self._count_parameters()
         print("Visual Question Answering Models Loaded")
+    
+    def _count_parameters(self):
+        for idx in range(len(self.models)):
+            self.models[idx].setup()
+            num_params = sum(p.numel() for p in self.models[idx]._inferencer.model.parameters())
+            self.model_pool[idx]["cost"] = num_params // 1e6
+            print(f"Model {idx} has {num_params // 1e6}M parameters")
     
     def forward(self, image, question, routing):
         assert routing < len(self.models), f"Routing should be less than {len(self.models)}"
@@ -105,10 +153,12 @@ class LanguageModel():
         self.model_pool = [
             {
                 "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                "cost": 8000,
                 "prompt": "You are a helpful assistant. You need to answer the question and keep it as short and simple as possible, without any explainations. For example, if the question is about the capital of France, you answer 'Paris'. If the question is about a certain number, return only the number.",
             },
             {
                 "model": "meta-llama/Llama-3.3-70B-Instruct",
+                "cost": 70000,
                 "prompt": "You are a helpful assistant. You need to answer the question and keep it as short and simple as possible, without any explainations. For example, if the question is about the capital of France, you answer 'Paris'. If the question is about a certain number, return only the number.",
             }
         ]

@@ -19,7 +19,7 @@ if __name__ == "__main__":
     with open('./data/retrieval_data.json') as f:
         data = json.load(f)
 
-    log = open(f"./logs/log_struct_new_{cost_weighting}.txt", "a+", buffering=1)
+    log = open(f"./logs/log_{cost_weighting}.log", "a+", buffering=1)
     for i in data:
         log.write(f"Query: {i['query']}\n")
         query = i['query']
@@ -56,17 +56,15 @@ if __name__ == "__main__":
             reward_mapping = check_execution(execution_trace, routing_system.router.routing_info)
             cost = execution_cost(execution_counter)
 
-            if int(label) == 1: # Positive, Minority class
-                if int(output) == int(label):
-                    reward = 100 # True Positive
+            if int(output) == int(label):
+                reward = 0 # True Positive
+            else:
+                if int(label) == 0:
+                    reward = -10
                 else:
-                    reward = -100 # False Negative, or -200 to penalize more for missed positives
-                
-            elif int(label) == 0: # Negative, Majority class
-                if int(output) == int(label): 
-                    reward = 1 # True Negative
-                else:
-                    reward = -10 # False Positive, or -20 to penalize more for false positives
+                    reward = -1000
+
+            reward = reward - cost_weighting * cost
             routing_system.update_router(image, routing_idx, reward, reward_mapping)
 
             log.write(f"Img: {id}; Label: {label}; ViperGPT: {output}; Routing: {routing_idx}; Cost: {cost};\n")

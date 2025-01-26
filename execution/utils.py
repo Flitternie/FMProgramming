@@ -14,9 +14,6 @@ from torchvision.utils import draw_bounding_boxes as tv_draw_bounding_boxes
 from torchvision.utils import make_grid
 from typing import Union
 
-clip_stats = (0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)
-
-
 def is_interactive() -> bool:
     try:
         from IPython import get_ipython
@@ -32,21 +29,6 @@ def denormalize(images, means=(0.485, 0.456, 0.406), stds=(0.229, 0.224, 0.225))
     means = torch.tensor(means).reshape(1, 3, 1, 1)
     stds = torch.tensor(stds).reshape(1, 3, 1, 1)
     return images * stds + means
-
-
-def show_batch(batch, stats=clip_stats):
-    fig, ax = plt.subplots(figsize=(12, 12))
-    ax.set_xticks([])
-    ax.set_yticks([])
-    denorm_images = denormalize(batch, *stats)
-    ax.imshow(make_grid(denorm_images[:64], nrow=8).permute(1, 2, 0).clamp(0, 1))
-
-
-def show_batch_from_dl(dl):
-    for images, labels in dl:
-        show_batch(images)
-        print(labels[:64])
-        break
 
 
 def show_single_image(image, denormalize_stats=None, bgr_image=False, save_path=None, size='small', bbox_info=None):
@@ -113,94 +95,103 @@ def draw_bounding_boxes(
     bboxes = torch.stack([bboxes[:, 0], height - bboxes[:, 3], bboxes[:, 2], height - bboxes[:, 1]], dim=1)
     return tv_draw_bounding_boxes(image, bboxes, width=width, **kwargs)
 
-
-def seed_everything(seed=0):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-
-def get_index_from_sample_id(sample_id, dataset):
-    df = dataset.df
-    return np.arange(df.shape[0])[df.index == sample_id]
-
-
-def save_json(data: dict, path: Union[str, pathlib.Path]):
-    if isinstance(path, str):
-        path = pathlib.Path(path)
-    if not path.parent.exists():
-        path.parent.mkdir(parents=True)
-    if path.suffix != '.json':
-        path = path.with_suffix('.json')
-    with open(path, 'w') as f:
-        json.dump(data, f, indent=4, sort_keys=True)
-
-
-def load_json(path: Union[str, pathlib.Path]):
-    if isinstance(path, str):
-        path = pathlib.Path(path)
-    if path.suffix != '.json':
-        path = path.with_suffix('.json')
-    with open(path, 'r') as f:
-        data = json.load(f)
-    return data
-
-
-def make_print_safe(string: str) -> str:
-    return string.replace(r'[', r'\[')
-
-
-def sprint(string: str):
-    print(make_print_safe(string))
-
-
-def print_full_df(df):
-    with pd.option_context('display.max_rows', None, 'display.max_columns', None):  # more options can be specified also
-        if is_interactive():
-            display(df)
+def convert_coco(object):
+    object = object.lower().strip()
+    if object not in coco_classes.keys():
+        if any(word in ["man", "woman", "child", "boy", "girl"] for word in object.split(" ")):
+            return "person"
+        if any(word in ["television"] for word in object.split(" ")):
+            return "tv"
+        if any(word in ["ball"] for word in object.split(" ")):
+            return "sports ball"
         else:
-            print(df)
+            for word in object.split(" "):
+                if word in coco_classes.keys():
+                    return word
+    else:
+        return object
+        
 
-
-def code_to_paste(code):
-    print('\n'.join([c[4:] for c in code.split('\n')[1:]]).replace('image', 'ip').replace('return ', ''))
-
-
-class HiddenPrints:
-    hide_prints = False
-
-    def __init__(self, model_name=None, console=None, use_newline=True):
-        self.model_name = model_name
-        self.console = console
-        self.use_newline = use_newline
-        self.tqdm_aux = None
-
-    def __enter__(self):
-        if self.hide_prints:
-            import tqdm  # We need to do an extra step to hide tqdm outputs. Does not work in Jupyter Notebooks.
-
-            def nop(it, *a, **k):
-                return it
-
-            self.tqdm_aux = tqdm.tqdm
-            tqdm.tqdm = nop
-
-            if self.model_name is not None:
-                self.console.print(f'Loading {self.model_name}...')
-            self._original_stdout = sys.stdout
-            self._original_stderr = sys.stderr
-            sys.stdout = open(os.devnull, 'w')
-            # May not be what we always want, but some annoying warnings end up to stderr
-            sys.stderr = open(os.devnull, 'w')
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.hide_prints:
-            sys.stdout.close()
-            sys.stdout = self._original_stdout
-            sys.stdout = self._original_stderr
-            if self.model_name is not None:
-                self.console.print(f'{self.model_name} loaded ')
-            import tqdm
-            tqdm.tqdm = self.tqdm_aux
-
+coco_classes = {
+    '__background__': 0,
+    'person': 1,
+    'bicycle': 2,
+    'car': 3,
+    'motorcycle': 4,
+    'airplane': 5,
+    'bus': 6,
+    'train': 7,
+    'truck': 8,
+    'boat': 9,
+    'traffic light': 10,
+    'fire hydrant': 11,
+    'stop sign': 12,
+    'parking meter': 13,
+    'bench': 14,
+    'bird': 15,
+    'cat': 16,
+    'dog': 17,
+    'horse': 18,
+    'sheep': 19,
+    'cow': 20,
+    'elephant': 21,
+    'bear': 22,
+    'zebra': 23,
+    'giraffe': 24,
+    'backpack': 25,
+    'umbrella': 26,
+    'handbag': 27,
+    'tie': 28,
+    'suitcase': 29,
+    'frisbee': 30,
+    'skis': 31,
+    'snowboard': 32,
+    'sports ball': 33,
+    'kite': 34,
+    'baseball bat': 35,
+    'baseball glove': 36,
+    'skateboard': 37,
+    'surfboard': 38,
+    'tennis racket': 39,
+    'bottle': 40,
+    'wine glass': 41,
+    'cup': 42,
+    'fork': 43,
+    'knife': 44,
+    'spoon': 45,
+    'bowl': 46,
+    'banana': 47,
+    'apple': 48,
+    'sandwich': 49,
+    'orange': 50,
+    'broccoli': 51,
+    'carrot': 52,
+    'hot dog': 53,
+    'pizza': 54,
+    'donut': 55,
+    'cake': 56,
+    'chair': 57,
+    'couch': 58,
+    'potted plant': 59,
+    'bed': 60,
+    'dining table': 61,
+    'toilet': 62,
+    'tv': 63,
+    'laptop': 64,
+    'mouse': 65,
+    'remote': 66,
+    'keyboard': 67,
+    'cell phone': 68,
+    'microwave': 69,
+    'oven': 70,
+    'toaster': 71,
+    'sink': 72,
+    'refrigerator': 73,
+    'book': 74,
+    'clock': 75,
+    'vase': 76,
+    'scissors': 77,
+    'teddy bear': 78,
+    'hair drier': 79,
+    'toothbrush': 80
+}

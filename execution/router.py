@@ -3,15 +3,15 @@ import inspect
 import astor
 import functools
 import warnings
-from execution.image_patch import ImagePatch, distance
+from execution.image_patch import ImagePatch, distance, cost_info
 from routing import Router, StructuredRouter
 
 routing_options = {
-    'find': [172, 233],
-    'exists': [172, 233],
-    'verify_property': [182, 3770],
-    'query': [182, 3770],
-    'llm_query': [8000, 70000]
+    'find': cost_info["object_detection"],
+    'exists': cost_info["object_detection"],
+    'verify_property': cost_info["vqa"],
+    'query': cost_info["vqa"],
+    'llm_query': cost_info["llm"]
 }
 
 tracked_methods = ["find", "exists", "verify_property", "query", "llm_query"]

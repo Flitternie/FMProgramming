@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import numpy as np
-import re
-import os
 import torch
-from dateutil import parser as dateparser
 from PIL import Image
 from torchvision import transforms
 from torchvision.ops import box_iou
 from typing import Union, List
 from word2number import w2n
+import warnings
 
-from execution.modules import config, object_detection, vqa, llm
-from execution.utils import show_single_image, load_json
+from execution.modules import *
+from execution.utils import show_single_image
+
+crop_larger_margin = False
 
 
 class ImagePatch:
@@ -133,7 +133,7 @@ class ImagePatch:
             try:
                 cropped_images.append(self.crop(*coordinates))
             except:
-                pass
+                warnings.warn("Invalid coordinates found in object detection")
         return cropped_images
 
     def exists(self, object_name: str, routing: int) -> bool:
@@ -203,7 +203,7 @@ class ImagePatch:
         right = int(right)
         upper = int(upper)
 
-        if config.crop_larger_margin:
+        if crop_larger_margin:
             left = max(0, left - 10)
             lower = max(0, lower - 10)
             right = min(self.width, right + 10)

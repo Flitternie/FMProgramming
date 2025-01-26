@@ -21,7 +21,7 @@ if __name__ == "__main__":
         data = json.load(f)
 
     file_name = "lowest" if config == 0 else "highest"
-    log = open(f"./logs/log_{file_name}.txt", "a+", buffering=1)
+    log = open(f"./logs/baseline_{file_name}.log", "a+", buffering=1)
     for i in data:
         log.write(f"Query: {i['query']}\n")
         query = i['query']
@@ -31,7 +31,7 @@ if __name__ == "__main__":
 
         code = i['code']
         program_str, execute_command = load_user_program(code)
-        routing_system = RoutingSystem(execute_command, program_str, cost_weighting=0)
+        routing_system = RoutingSystem(execute_command, program_str, cost_weighting=0, config="struct_reinforce")
 
         print("Start loading images")
         positive_images, positive_image_ids, negative_images, negative_image_ids = prepare_data(i, hased_query)
@@ -45,7 +45,6 @@ if __name__ == "__main__":
             try:
                 output, execution_counter, execution_trace = execute_routed_program(routed_program, image)
             except Exception as e:
-                print(e)
                 log.write(f"Img: {id}; Label: {label}; ViperGPT: {e}; Routing: {routing_idx};\n")
                 pbar.update(1)
                 continue
