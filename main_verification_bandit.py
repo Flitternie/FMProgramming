@@ -1,19 +1,16 @@
 import tqdm
 import json
+import argparse
 
+from execution.modules import initialize
 from execution.router import *
 from utils_retrieval import *
 from utils import set_seed
 
-def main(cost_weighting):
-    set_seed(42)
-
-    # Load annotations
-    with open('./data/retrieval_data.json') as f:
-        data = json.load(f)
-
+def main(data, cost_weighting):
     log = open(f"./logs/baseline_bandit_{cost_weighting}.txt", "a+", buffering=1)
     for i in data:
+        set_seed(42)
         log.write(f"Query: {i['query']}\n")
         query = i['query']
         print(query)
@@ -65,6 +62,15 @@ def main(cost_weighting):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Image Verification baseline')
+    parser.add_argument('--config', type=str, required=True, help='Path to the configuration file')
+    args = parser.parse_args()
+    initialize(args.config)
+
+    # Load annotations
+    with open('./data/retrieval_data.json') as f:
+        data = json.load(f)
+
     for cost_weighting in [0, 0.0001, 0.001, 0.01, 0.1]:
-        main(cost_weighting)
+        main(data, cost_weighting)
 

@@ -1,17 +1,10 @@
-import json
 import matplotlib.pyplot as plt
-import numpy as np
 import os
-import pandas as pd
-import pathlib
-import random
-import sys
-import time
+import yaml
 import torch
 from PIL import Image
 from torchvision import transforms
 from torchvision.utils import draw_bounding_boxes as tv_draw_bounding_boxes
-from torchvision.utils import make_grid
 from typing import Union
 
 def is_interactive() -> bool:
@@ -23,6 +16,24 @@ def is_interactive() -> bool:
             return False
     except NameError:
         return False  # Probably standard Python interpreter
+    
+# Custom object to parse YAML data
+class YAMLObject:
+    def __init__(self, data: dict):
+        for key, value in data.items():
+            if isinstance(value, dict):
+                value = YAMLObject(value)
+            elif isinstance(value, list):
+                value = [YAMLObject(item) if isinstance(item, dict) else item for item in value]
+            self.__setattr__(key, value)
+    
+    def serialize(self) -> dict:
+        return self.__dict__
+    
+def load_config(file_path: str) -> YAMLObject:
+    with open(file_path, 'r') as file:
+        data = yaml.safe_load(file)
+    return YAMLObject(data)
 
 
 def denormalize(images, means=(0.485, 0.456, 0.406), stds=(0.229, 0.224, 0.225)):

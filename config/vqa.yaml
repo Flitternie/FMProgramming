@@ -1,0 +1,31 @@
+object_detection:
+  - name: rtmdet_tiny_8xb32-300e_coco
+    type: ObjectDetection
+    device: 0
+    threshold: 0.5
+    cost: 5 
+  - name: grounding_dino_swin-b_finetune_16xb2_1x_coco
+    type: "TextToBbox"
+    device: 1
+    threshold: 0.3
+    cost: 233
+vqa:
+  - name: ofa-base_3rdparty-zeroshot_vqa
+    type: VQA
+    device: 1
+    cost: 182
+  - name: blip2-opt2.7b_3rdparty-zeroshot_vqa
+    type: VQA
+    device: 0
+    cost: 3770
+llm:
+  - name: meta-llama/Meta-Llama-3.1-8B-Instruct
+    url: https://api.deepinfra.com/v1/openai
+    cost: 8000
+    temperature: 0
+    prompt: You are a helpful assistant. You need to answer the question and keep it as short and simple as possible, without any explainations. For example, if the question is about the capital of France, you answer 'Paris'. If the question is about a certain number, return only the number.
+  - name: meta-llama/Llama-3.3-70B-Instruct
+    url: https://api.deepinfra.com/v1/openai
+    cost: 70000
+    temperature: 0
+    prompt: You are a helpful assistant. You need to answer the question and keep it as short and simple as possible, without any explainations. For example, if the question is about the capital of France, you answer 'Paris'. If the question is about a certain number, return only the number.

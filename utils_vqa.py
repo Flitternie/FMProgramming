@@ -1,3 +1,4 @@
+import os
 import PIL
 import random
 import torch
@@ -35,15 +36,27 @@ def prepare_data(data):
 
 
 class VqaDataset(torch.utils.data.Dataset):
-    def __init__(self, image_paths, answers, random_seed=42):
-        assert len(image_paths) == len(answers)
-        self.images = [load_image(img_path) for img_path in image_paths]
+    def __init__(self, data_dir, image_data, random_seed=42):
+        self.data = image_data
+        self.data_dir = data_dir
         self.random_seed = random_seed
+        self._initiate()
         self._shuffle()
+    
+    def _initiate(self):
+        self.images = []
+        self.labels = []
+        self.image_paths = []
+        for data in self.data:
+            image_path = os.path.join(self.data_dir, data['image'])
+            image = load_image(image_path)
+            if image is not None:
+                self.images.append(image)
+                self.labels.append(data['answer'])
+                self.image_paths.append(data['image'])
     
     def _shuffle(self):
         random.seed(self.random_seed)
-        self.labels = self.answers
         assert len(self.images) == len(self.labels)
         self.indices = list(range(len(self.images)))
         random.shuffle(self.indices)
@@ -53,4 +66,4 @@ class VqaDataset(torch.utils.data.Dataset):
     
     def __getitem__(self, idx):
         idx = self.indices[idx]
-        return self.images[idx], self.labels[idx]
+        return self.images[idx], self.labels[idx], self.image_paths[idx]

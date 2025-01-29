@@ -2,25 +2,29 @@ import tqdm
 import json
 import argparse
 
+from execution.modules import initialize
 from execution.router import *
 from utils_retrieval import *
 from utils import set_seed
 
-set_seed(42)
 
 if __name__ == "__main__":
     # Load arguments
     parser = argparse.ArgumentParser(description='Run the image verification task')
-    parser.add_argument('--cost_weighting', type=float, default=0, help='Cost weighting for the routing system')
+    parser.add_argument('--cost_weighting', type=float, required=True, help='Cost weighting for the routing system')
+    parser.add_argument('--config', type=str, required=True, help='Path to the config file')
     args = parser.parse_args()
     cost_weighting = args.cost_weighting
+    config = args.config
+    initialize(config)
 
     # Load annotations
     with open('./data/retrieval_data.json') as f:
         data = json.load(f)
 
-    log = open(f"./logs/log_{cost_weighting}.log", "a+", buffering=1)
+    log = open(f"./logs/log_{cost_weighting}_new_reward.log", "a+", buffering=1)
     for i in data:
+        set_seed(42)
         log.write(f"Query: {i['query']}\n")
         query = i['query']
         print(query)
@@ -29,7 +33,7 @@ if __name__ == "__main__":
 
         code = i['code']
         program_str, execute_command = load_user_program(code)
-        routing_system = RoutingSystem(execute_command, program_str, cost_weighting)
+        routing_system = RoutingSystem(execute_command, program_str, cost_weighting, config="reinforce")
 
         print("Start loading images")
         positive_images, positive_image_ids, negative_images, negative_image_ids = prepare_data(i, hased_query)
@@ -53,18 +57,20 @@ if __name__ == "__main__":
                 pbar.update(1)   
                 continue 
             
-            reward_mapping = check_execution(execution_trace, routing_system.router.routing_info)
+            # reward_mapping = check_execution(execution_trace, routing_system.router.routing_info)
+            reward_mapping = [1 for i in routing_system.router.routing_info]
             cost = execution_cost(execution_counter)
 
-            if int(output) == int(label):
-                reward = 0 # True Positive
-            else:
-                if int(label) == 0:
-                    reward = -10
-                else:
-                    reward = -1000
+            # if int(output) == int(label):
+            #     reward = 0 # True Positive
+            # else:
+            #     if int(label) == 0:
+            #         reward = -10
+            #     else:
+            #         reward = -1000
+            reward = 100 if int(output) == int(label) else -100
 
-            reward = reward - cost_weighting * cost
+            # reward = reward - cost_weighting * cost
             routing_system.update_router(image, routing_idx, reward, reward_mapping)
 
             log.write(f"Img: {id}; Label: {label}; ViperGPT: {output}; Routing: {routing_idx}; Cost: {cost};\n")

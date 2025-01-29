@@ -3,16 +3,20 @@ import inspect
 import astor
 import functools
 import warnings
-from execution.image_patch import ImagePatch, distance, cost_info
+from execution.modules import get_cost_info
+from execution.image_patch import ImagePatch, distance
 from routing import Router, StructuredRouter
 
-routing_options = {
-    'find': cost_info["object_detection"],
-    'exists': cost_info["object_detection"],
-    'verify_property': cost_info["vqa"],
-    'query': cost_info["vqa"],
-    'llm_query': cost_info["llm"]
-}
+def get_routing_options():
+    cost_info = get_cost_info()
+    routing_options = {
+        'find': cost_info["object_detection"],
+        'exists': cost_info["object_detection"],
+        'verify_property': cost_info["vqa"],
+        'query': cost_info["vqa"],
+        'llm_query': cost_info["llm"]
+    }
+    return routing_options
 
 tracked_methods = ["find", "exists", "verify_property", "query", "llm_query"]
 tracked_functions = [] 
@@ -155,6 +159,7 @@ def execution_cost(execution_counter):
         execution_counter: List of tuples (method_name/function_name, routing_value, count).
     """
     cost = 0
+    routing_options = get_routing_options()
     for function, routing, count in execution_counter:
         if routing is not None:
             cost += count * routing_options[function][routing]
@@ -187,6 +192,7 @@ class RoutingSystem:
         self.func = func
         self.source = source
         self.cost_weighting = cost_weighting
+        self.routing_options = get_routing_options()
         self.function_calls = self.analyze_user_program()
         self.initialize(self.function_calls, config)
     
@@ -201,9 +207,9 @@ class RoutingSystem:
         '''
         self.routing_info = {call['identifier']: 0 for call in function_calls}  # Default routing to 0 (small model)
         if config == "struct_reinforce":
-            self.router = StructuredRouter(self.routing_info, routing_options, self.cost_weighting)
+            self.router = StructuredRouter(self.routing_info, self.routing_options, self.cost_weighting)
         elif config == "reinforce" or config == "bandit":
-            self.router = Router(self.routing_info, routing_options, self.cost_weighting, config)
+            self.router = Router(self.routing_info, self.routing_options, self.cost_weighting, config)
         else:
             raise ValueError("Invalid configuration, valid options: struct_reinforce, reinforce, bandit")
     
@@ -246,6 +252,7 @@ class RoutingSystem:
         else:
             routing_decisions, idx = self.make_routing_decisions(input)
 
+        routing_options = self.routing_options
         class RoutingArgumentTransformer(ast.NodeTransformer):
             def visit_Call(self, node):
                 if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
@@ -282,7 +289,7 @@ class RoutingSystem:
 
         return execute_command, routing_decisions, idx
 
-    def update_router(self, input_image, routing_idx, reward, reward_mapping=None):
+    def update_router(self, input_image, routing_idx, reward, reward_mapping):
         '''
         This function updates the router based on the reward received.
 
@@ -306,6 +313,7 @@ class RoutingSystem:
         self.source = inspect.getsource(self.source) if not isinstance(self.source, str) else self.source
         tree = ast.parse(self.source)
         function_calls = []
+        routing_options = self.routing_options
 
         class MethodCallVisitor(ast.NodeVisitor):
             def visit_Call(self, node):

@@ -1,28 +1,30 @@
 import tqdm
 import json
-import hashlib
 import argparse
 
+from execution.modules import initialize
 from execution.router import *
 from utils_retrieval import *
 from utils import set_seed
 
-set_seed(42)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Retrieval baseline')
-    parser.add_argument('--config', type=int, default=0, help='0 for cheapest routing, 1 for most expensive routing')
+    parser = argparse.ArgumentParser(description='Run the image verification baseline')
+    parser.add_argument('--mode', type=int, default=0, help='0 for cheapest routing, 1 for most expensive routing')
+    parser.add_argument('--config', type=str, required=True, help='Path to the configuration file')
     args = parser.parse_args()
-    config = args.config
-    assert config in [0, 1], "Invalid config value. Please choose 0 for cheapest routing, 1 for most expensive routing"
+    mode = args.mode
+    assert mode in [0, 1], "Invalid mode value. Please choose 0 for cheapest routing, 1 for most expensive routing"
+    initialize(args.config)
 
     # Load annotations
     with open('./data/retrieval_data.json') as f:
         data = json.load(f)
 
-    file_name = "lowest" if config == 0 else "highest"
-    log = open(f"./logs/baseline_{file_name}.log", "a+", buffering=1)
+    file_name = "lowest" if mode == 0 else "highest"
+    log = open(f"./logs/baseline_{file_name}.new", "a+", buffering=1)
     for i in data:
+        set_seed(42)
         log.write(f"Query: {i['query']}\n")
         query = i['query']
         print(query)
@@ -31,7 +33,7 @@ if __name__ == "__main__":
 
         code = i['code']
         program_str, execute_command = load_user_program(code)
-        routing_system = RoutingSystem(execute_command, program_str, cost_weighting=0, config="struct_reinforce")
+        routing_system = RoutingSystem(execute_command, program_str, cost_weighting=0)
 
         print("Start loading images")
         positive_images, positive_image_ids, negative_images, negative_image_ids = prepare_data(i, hased_query)
@@ -41,7 +43,7 @@ if __name__ == "__main__":
         pbar = tqdm.tqdm(total=len(dataset))
         for idx in range(len(dataset)):
             image, label, id = dataset[idx]
-            routed_program, routing_decision, routing_idx = routing_system.routing(image, config=config) # config=1 for most expensive routing, config=0 for cheapest routing
+            routed_program, routing_decision, routing_idx = routing_system.routing(image, config=mode)
             try:
                 output, execution_counter, execution_trace = execute_routed_program(routed_program, image)
             except Exception as e:

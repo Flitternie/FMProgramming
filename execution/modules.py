@@ -1,19 +1,37 @@
 from execution.models import ObjectDetection, VisualQuestionAnswering, LanguageModel
+from execution.utils import load_config
 
-debug_mode = False
+object_detection_models = None
+vqa_models = None
+llm_models = None
 
-object_detection_models = ObjectDetection(debug=debug_mode)
-vqa_models = VisualQuestionAnswering(debug=debug_mode)
-llm_models = LanguageModel(debug=debug_mode)
+cost_info = None
 
-cost_info = {
-    "object_detection": [model["cost"] for model in object_detection_models.model_pool],
-    "vqa": [model["cost"] for model in vqa_models.model_pool],
-    "llm": [model["cost"] for model in llm_models.model_pool]
-}
+def initialize(config):
+    global object_detection_models, vqa_models, llm_models, cost_info
+
+    config = load_config(config)
+    config.debug = False
+
+    object_detection_models = ObjectDetection(config.object_detection, debug=config.debug)
+    vqa_models = VisualQuestionAnswering(config.vqa, debug=config.debug)
+    llm_models = LanguageModel(config.llm, debug=config.debug)
+
+    cost_info = {
+        "object_detection": [model.cost for model in object_detection_models.model_pool],
+        "vqa": [model.cost for model in vqa_models.model_pool],
+        "llm": [model.cost for model in llm_models.model_pool]
+    }
+
+def get_cost_info():
+    if cost_info is None:
+        raise RuntimeError("Module not initialized. Call initialize() first.")
+    return cost_info
 
 def object_detection(image, object_name, routing=None):
     coordinates, scores = object_detection_models.forward(image, object_name, routing)
+    # sort the coordinates based on the scores in descending order
+    coordinates = [x for _, x in sorted(zip(scores, coordinates), reverse=True)]
     return coordinates
 
 def vqa(image, text, routing=None):

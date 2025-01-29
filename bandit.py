@@ -365,7 +365,7 @@ class Reinforce:
             
             # Sample reward with added Gaussian noise (Thompson Sampling)
             sampled_r = reward_prediction.item() + Normal(0, self.nu * sigma.item()).sample().item()
-            # sampled_r -= self.arm_costs[arm_index] * self.cost_weighting
+            sampled_r -= self.arm_costs[arm_index] * self.cost_weighting
             sampled_rewards[arm_index] = sampled_r
             g_list.append(gradients)
 
