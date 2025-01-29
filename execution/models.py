@@ -49,10 +49,15 @@ class ObjectDetection():
             image = self.image_processor(image)
 
         if self.model_pool[routing].type == "TextToBbox":
-            result = self.models[routing](image, object_name)
-            # coordinates, scores = self._parse_coordinates(result)
-            result = result[result.scores > self.model_pool[routing].threshold]
-            coordinates, scores = result.bboxes, result.scores
+            if object_name == "object":
+                result = self.models[routing](image, object_name)
+                result = result[result.scores > 0.03]
+                coordinates, scores = result.bboxes, result.scores
+            else:
+                result = self.models[routing](image, object_name)
+                # coordinates, scores = self._parse_coordinates(result)
+                result = result[result.scores > self.model_pool[routing].threshold]
+                coordinates, scores = result.bboxes, result.scores
 
         elif self.model_pool[routing].type == "ObjectDetection":
             result = self.models[routing](image)
