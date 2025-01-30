@@ -29,9 +29,7 @@ def get_cost_info():
     return cost_info
 
 def object_detection(image, object_name, routing=None):
-    coordinates, scores = object_detection_models.forward(image, object_name, routing)
-    # sort the coordinates based on the scores in descending order
-    coordinates = [x for _, x in sorted(zip(scores, coordinates), reverse=True)]
+    coordinates, scores = object_detection_models.forward(image, object_name, routing)    
     return coordinates
 
 def vqa(image, text, routing=None):

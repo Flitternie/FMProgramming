@@ -1,19 +1,21 @@
 import re
 import torch
 import torchvision.transforms as transforms
+import matplotlib.pyplot as plt
 from openai import OpenAI
 from agentlego.apis import load_tool
 from execution.utils import convert_coco
 
 
 class ObjectDetection():
-    def __init__(self, config, debug=False):        
+    def __init__(self, config):        
         '''
         model_list:
             See mmdetection(https://github.com/open-mmlab/mmdetection/) for more details.
         '''
         self.image_processor = transforms.ToPILImage()
         self.model_pool = config
+        self.debug = config.debug if hasattr(config, "debug") else False
         self.initialize()
 
     def initialize(self):
@@ -47,10 +49,17 @@ class ObjectDetection():
         assert routing < len(self.models), f"Routing should be less than {len(self.models)}"
         if isinstance(image, torch.Tensor):
             image = self.image_processor(image)
+        if self.debug:
+            # Debugging mode, display the image and the object name as title
+            plt.figure(figsize=(4, 4))
+            plt.imshow(image)
+            plt.title(f"Object: {object_name}")
+            plt.axis("off")
+            plt.show()            
 
         if self.model_pool[routing].type == "TextToBbox":
             if object_name == "object":
-                result = self.models[routing](image, object_name)
+                result = self.models[routing](image, "all objects")
                 result = result[result.scores > 0.03]
                 coordinates, scores = result.bboxes, result.scores
             else:
@@ -67,6 +76,18 @@ class ObjectDetection():
                 object_name_idx = self.models[routing].classes.index(object_name) if object_name in self.models[routing].classes else -1
                 result = result[result.labels == object_name_idx]
             coordinates, scores = result.bboxes.tolist(), result.scores.tolist()
+
+        coordinates = [x for _, x in sorted(zip(scores, coordinates), reverse=True)]
+        if self.debug and len(coordinates) > 0:
+            # Debugging mode, display the image with bounding boxes and scores
+            plt.figure(figsize=(4, 4))
+            plt.imshow(image)
+            plt.title(f"Detected {len(coordinates)} {object_name} in the image")
+            for i in range(len(coordinates[:5])):
+                x1, y1, x2, y2 = coordinates[i]
+                plt.gca().add_patch(plt.Rectangle((x1, y1), x2 - x1, y2 - y1, fill=False, edgecolor="r", linewidth=1))
+                plt.text(x1, y1, f"{scores[i]:.2f}", color="r", fontsize=10)
+            plt.axis("off")
         
         print(f"Detected {len(coordinates)} {object_name} in the image")
         return coordinates, scores
@@ -83,8 +104,9 @@ class VisualQuestionAnswering():
         'ofa-base_3rdparty-zeroshot_vqa', 182.24M
         'otter-9b_3rdparty_vqa', 8220.45M
     '''
-    def __init__(self, config, debug=False):
+    def __init__(self, config):
         self.model_pool = config
+        self.debug = config.debug if hasattr(config, "debug") else False
         self.image_processor = transforms.ToPILImage()
         self.initialize()
     
@@ -104,11 +126,28 @@ class VisualQuestionAnswering():
         assert routing < len(self.models), f"Routing should be less than {len(self.models)}"
         if isinstance(image, torch.Tensor):
             image = self.image_processor(image)
-        return self.models[routing](image, question)
+        if self.debug:
+            # Debugging mode, display the image and the question as title
+            plt.figure(figsize=(4, 4))
+            plt.imshow(image)
+            plt.title(f"Question: {question}")
+            plt.axis("off")
+            plt.show()
+        response = self.models[routing](image, question + " Answer within three words.")
+        if self.debug:
+            # Debugging mode, display the image, the question and the answer
+            plt.figure(figsize=(4, 4))
+            plt.imshow(image)
+            plt.title(f"Question: {question}\nAnswer: {response}")
+            plt.axis("off")
+            plt.show()
+        return response
+
     
 class LanguageModel():
-    def __init__(self, config, debug=False):      
+    def __init__(self, config):      
         self.model_pool = config
+        self.debug = config.debug if hasattr(config, "debug") else False
         self.initialize()
 
     def initialize(self):
@@ -130,4 +169,7 @@ class LanguageModel():
             temperature=self.model_pool[routing].prompt.temperature,
             seed=42,
         )
-        return completion.choices[0].message.content
+        response = completion.choices[0].message.content
+        if self.debug:
+            print(f"Query: {query}\nResponse: {response}")
+        return response
