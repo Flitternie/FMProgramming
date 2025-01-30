@@ -8,14 +8,14 @@ from execution.utils import convert_coco
 
 
 class ObjectDetection():
-    def __init__(self, config):        
+    def __init__(self, config, debug=False):       
         '''
         model_list:
             See mmdetection(https://github.com/open-mmlab/mmdetection/) for more details.
         '''
         self.image_processor = transforms.ToPILImage()
         self.model_pool = config
-        self.debug = config.debug if hasattr(config, "debug") else False
+        self.debug = debug
         self.initialize()
 
     def initialize(self):
@@ -61,12 +61,10 @@ class ObjectDetection():
             if object_name == "object":
                 result = self.models[routing](image, "all objects")
                 result = result[result.scores > 0.03]
-                coordinates, scores = result.bboxes, result.scores
             else:
                 result = self.models[routing](image, object_name)
                 # coordinates, scores = self._parse_coordinates(result)
                 result = result[result.scores > self.model_pool[routing].threshold]
-                coordinates, scores = result.bboxes, result.scores
 
         elif self.model_pool[routing].type == "ObjectDetection":
             result = self.models[routing](image)
@@ -75,8 +73,12 @@ class ObjectDetection():
                 object_name = convert_coco(object_name)
                 object_name_idx = self.models[routing].classes.index(object_name) if object_name in self.models[routing].classes else -1
                 result = result[result.labels == object_name_idx]
-            coordinates, scores = result.bboxes.tolist(), result.scores.tolist()
-
+        
+        coordinates, scores = result.bboxes, result.scores
+        if not isinstance(coordinates, list):
+            coordinates = coordinates.tolist()
+            scores = scores.tolist()
+        
         coordinates = [x for _, x in sorted(zip(scores, coordinates), reverse=True)]
         if self.debug and len(coordinates) > 0:
             # Debugging mode, display the image with bounding boxes and scores
@@ -104,9 +106,9 @@ class VisualQuestionAnswering():
         'ofa-base_3rdparty-zeroshot_vqa', 182.24M
         'otter-9b_3rdparty_vqa', 8220.45M
     '''
-    def __init__(self, config):
+    def __init__(self, config, debug=False):
         self.model_pool = config
-        self.debug = config.debug if hasattr(config, "debug") else False
+        self.debug = debug
         self.image_processor = transforms.ToPILImage()
         self.initialize()
     
@@ -133,7 +135,10 @@ class VisualQuestionAnswering():
             plt.title(f"Question: {question}")
             plt.axis("off")
             plt.show()
-        response = self.models[routing](image, question + " Answer within three words.")
+        # Add a length constraint for large VLMs
+        if self.model_pool[routing].cost > 5000:
+            question = question + " Answer within 3 words."
+        response = self.models[routing](image, question)
         if self.debug:
             # Debugging mode, display the image, the question and the answer
             plt.figure(figsize=(4, 4))
@@ -145,9 +150,9 @@ class VisualQuestionAnswering():
 
     
 class LanguageModel():
-    def __init__(self, config):      
+    def __init__(self, config, debug=False):     
         self.model_pool = config
-        self.debug = config.debug if hasattr(config, "debug") else False
+        self.debug = debug
         self.initialize()
 
     def initialize(self):

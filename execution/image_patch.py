@@ -12,8 +12,6 @@ import warnings
 from execution.modules import *
 from execution.utils import show_single_image
 
-crop_larger_margin = False
-
 
 class ImagePatch:
     """A Python class containing a crop of an image centered around a particular object, as well as relevant
@@ -83,11 +81,11 @@ class ImagePatch:
             self.right = image.shape[2]  # width
             self.upper = image.shape[1]  # height
         else:
-            self.cropped_image = image[:, image.shape[1]-upper:image.shape[1]-lower, left:right]
-            self.left = left + parent_left
-            self.upper = upper + parent_lower
-            self.right = right + parent_left
-            self.lower = lower + parent_lower
+            self.cropped_image = image[:, lower:upper, left:right]
+            self.left = left
+            self.upper = upper
+            self.right = right 
+            self.lower = lower
 
         self.height = self.cropped_image.shape[1]
         self.width = self.cropped_image.shape[2]
@@ -202,12 +200,6 @@ class ImagePatch:
         lower = int(lower)
         right = int(right)
         upper = int(upper)
-
-        if crop_larger_margin:
-            left = max(0, left - 10)
-            lower = max(0, lower - 10)
-            right = min(self.width, right + 10)
-            upper = min(self.height, upper + 10)
 
         return ImagePatch(self.cropped_image, left, lower, right, upper, self.left, self.lower, queues=self.queues,
                               parent_img_patch=self)

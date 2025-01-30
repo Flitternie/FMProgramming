@@ -11,7 +11,6 @@ def initialize(config):
     global object_detection_models, vqa_models, llm_models, cost_info
 
     config = load_config(config)
-    config.debug = False
 
     object_detection_models = ObjectDetection(config.object_detection, debug=config.debug)
     vqa_models = VisualQuestionAnswering(config.vqa, debug=config.debug)
