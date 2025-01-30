@@ -255,10 +255,9 @@ class RoutingSystem:
         routing_options = self.routing_options
         class RoutingArgumentTransformer(ast.NodeTransformer):
             def visit_Call(self, node):
-                if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
-                    instance_name = node.func.value.id
+                if isinstance(node.func, ast.Attribute):
+                    instance_name = node.func.value.id if isinstance(node.func.value, ast.Name) else None
                     method_name = node.func.attr
-                
                     if method_name in routing_options.keys():
                         # Generate an identifier to match against routing info
                         if len(node.args) > 0:
@@ -318,10 +317,8 @@ class RoutingSystem:
         class MethodCallVisitor(ast.NodeVisitor):
             def visit_Call(self, node):
                 if isinstance(node.func, ast.Attribute):
-                    # Extract the function call details
-                    method_name = node.func.attr
                     instance_name = node.func.value.id if isinstance(node.func.value, ast.Name) else None
-                    # Get arguments, specifically for calls like find, vqa, etc.
+                    method_name = node.func.attr
                     if method_name in routing_options.keys():
                         if len(node.args) > 0:
                             query = ", ".join([arg.s for arg in node.args if isinstance(arg, ast.Str)])
