@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import numpy as np
 import torch
 from PIL import Image
@@ -261,3 +262,43 @@ def distance(patch_a: Union[ImagePatch, float], patch_b: Union[ImagePatch, float
         dist = abs(patch_a - patch_b)
 
     return dist
+
+
+def to_numeric(string, no_string=False):
+    """
+    Converts a string to a numeric value if possible.
+    """
+
+    try:
+        # If it is a word number (e.g. 'zero')
+        numeric = w2n.word_to_num(string)
+        return numeric
+    except ValueError:
+        pass
+
+    # Remove any non-numeric characters except the decimal point and the negative sign
+    string_re = re.sub("[^0-9\.\-]", "", string)
+
+    if string_re.startswith('-'):
+        string_re = '&' + string_re[1:]
+
+    # Check if the string includes a range
+    if "-" in string_re:
+        # Split the string into parts based on the dash character
+        parts = string_re.split("-")
+        return to_numeric(parts[0].replace('&', '-'))
+    else:
+        string_re = string_re.replace('&', '-')
+
+    try:
+        # Convert the string to a float or int depending on whether it has a decimal point
+        if "." in string_re:
+            numeric = float(string_re)
+        else:
+            numeric = int(string_re)
+    except:
+        if no_string:
+            raise ValueError
+        # No numeric values. Return input
+        return string
+    return numeric
