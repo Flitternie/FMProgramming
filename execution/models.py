@@ -171,7 +171,7 @@ class LanguageModel():
                 {"role": "system", "content": self.model_pool[routing].prompt},
                 {"role": "user", "content": query}
             ],
-            temperature=self.model_pool[routing].prompt.temperature,
+            temperature=self.model_pool[routing].temperature,
             seed=42,
         )
         response = completion.choices[0].message.content
