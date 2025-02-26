@@ -10,6 +10,16 @@ transform = transforms.Compose([
     transforms.ToTensor(),
 ])
 
+def postprocessing(output):
+    if isinstance(output, bool):
+        return int(output)
+    if "yes" in output.lower():
+        output = 1
+    else:
+        output = 0
+    return output
+    
+
 # Function to load and execute a user program from a JSON file
 def load_user_program(code):
     program_str = code

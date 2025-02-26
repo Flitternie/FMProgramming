@@ -180,6 +180,7 @@ class RoutingSystem:
             func: Function to execute the user program
             source: Source code of the user program
             cost_weighting: Cost weighting parameter for the router
+            config: Configuration for the router (options: struct_reinforce, reinforce, bandit)
 
         Methods:
             initialize: Initializes the routing decisions based on the function calls in the user program

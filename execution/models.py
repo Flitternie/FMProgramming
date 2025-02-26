@@ -4,7 +4,13 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 from openai import OpenAI
 from agentlego.apis import load_tool
-from execution.utils import convert_coco
+from execution.utils import convert_coco, RemoteMLLM
+
+def load_model(model):
+    if "vllm" in model.type:
+        return RemoteMLLM(model.name, api_key=model.api_key, base_url=model.base_url)
+    else:
+        return load_tool(tool_type=model.type, model=model.name, device=model.device)
 
 
 class ObjectDetection():
@@ -19,7 +25,7 @@ class ObjectDetection():
         self.initialize()
 
     def initialize(self):
-        self.models = [load_tool(model.type, model=model.name, device=model.device) for model in self.model_pool]
+        self.models = [load_model(model) for model in self.model_pool]
         self._count_parameters()
         print("Object Detection Models Loaded")
     
@@ -43,7 +49,7 @@ class ObjectDetection():
             self.models[idx].setup()
             num_params = sum(p.numel() for p in self.models[idx]._inferencer.model.parameters())
             self.model_pool[idx].cost = num_params // 1e6
-            print(f"Model {idx} has {num_params // 1e6}M parameters")
+            print(f"Object Detection Model Index {idx}: {self.model_pool[idx].name} has {self.model_pool[idx].cost}M parameters")
 
     def forward(self, image, object_name, routing):
         assert routing < len(self.models), f"Routing should be less than {len(self.models)}"
@@ -63,7 +69,6 @@ class ObjectDetection():
                 result = result[result.scores > 0.03]
             else:
                 result = self.models[routing](image, object_name)
-                # coordinates, scores = self._parse_coordinates(result)
                 result = result[result.scores > self.model_pool[routing].threshold]
 
         elif self.model_pool[routing].type == "ObjectDetection":
@@ -113,16 +118,19 @@ class VisualQuestionAnswering():
         self.initialize()
     
     def initialize(self):
-        self.models = [load_tool(model.type, model=model.name, device=model.device) for model in self.model_pool]
+        self.models = [load_model(model) for model in self.model_pool]
         self._count_parameters()
         print("Visual Question Answering Models Loaded")
     
     def _count_parameters(self):
         for idx in range(len(self.models)):
-            self.models[idx].setup()
-            num_params = sum(p.numel() for p in self.models[idx]._inferencer.model.parameters())
-            self.model_pool[idx].cost = num_params // 1e6
-            print(f"Model {idx} has {num_params // 1e6}M parameters")
+            try:
+                self.models[idx].setup()
+                num_params = sum(p.numel() for p in self.models[idx]._inferencer.model.parameters())
+                self.model_pool[idx].cost = num_params // 1e6
+            except:
+                pass
+            print(f"VQA Model Index {idx}: {self.model_pool[idx].name} has {self.model_pool[idx].cost}M parameters")
     
     def forward(self, image, question, routing):
         assert routing < len(self.models), f"Routing should be less than {len(self.models)}"

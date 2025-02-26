@@ -1,7 +1,10 @@
 import matplotlib.pyplot as plt
 import os
+import io
+import base64
 import yaml
 import torch
+from openai import OpenAI
 from PIL import Image
 from torchvision import transforms
 from torchvision.utils import draw_bounding_boxes as tv_draw_bounding_boxes
@@ -29,6 +32,51 @@ class YAMLObject:
     
     def serialize(self) -> dict:
         return self.__dict__
+
+class RemoteMLLM:
+    def __init__(self, model_name, api_key, base_url):
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+        )
+        self.model_name = model_name
+
+    def encode_base64(self, image) -> str:
+        """Encode an image in tensor to base64 format."""
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG")
+        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        return img_str
+    
+    def __call__(self, image, question) -> str:
+        image_base64 = self.encode_base64(image)
+
+        completion = self.client.chat.completions.create(
+            model = self.model_name,
+            temperature = 0.0,
+            max_tokens = 1,
+            messages = 
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": question
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            },
+                        }
+                    ]
+                }
+            ]
+        )
+
+        return completion.choices[0].message.content
+
     
 def load_config(file_path: str) -> YAMLObject:
     with open(file_path, 'r') as file:

@@ -365,13 +365,14 @@ class Reinforce:
             
             # Sample reward with added Gaussian noise (Thompson Sampling)
             sampled_r = reward_prediction.item() + Normal(0, self.nu * sigma.item()).sample().item()
+            # Compute the local costs for the current arm selection
             sampled_r -= self.arm_costs[arm_index] * self.cost_weighting
             sampled_rewards[arm_index] = sampled_r
             g_list.append(gradients)
 
+        self.g_list = g_list  # Store gradients for training
         # Select the arm with the highest sampled reward
         selected_arm = torch.argmax(sampled_rewards).item()
-        self.U += g_list[selected_arm] ** 2  # Update U using the gradients of selected arm
 
         return selected_arm, sampled_rewards.tolist(), true_rewards.tolist()
 
@@ -380,6 +381,10 @@ class Reinforce:
         self.context_list.append(context)
         self.arm_list.append(arm_idx)
         self.reward_list.append(final_r)
+
+        self.U += self.g_list[arm_idx] ** 2  # Update U using the gradients of selected arm
+        self.g_list = None # Clear gradients after updating U
+
 
     def train(self, num_epochs, batch_size):
         assert len(self.context_list) == len(self.arm_list) == len(self.reward_list), "Training data mismatch"
