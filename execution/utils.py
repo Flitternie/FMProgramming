@@ -54,7 +54,6 @@ class RemoteMLLM:
         completion = self.client.chat.completions.create(
             model = self.model_name,
             temperature = 0.0,
-            max_tokens = 1,
             messages = 
             [
                 {

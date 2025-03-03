@@ -1,3 +1,4 @@
+import os
 import tqdm
 import json
 import argparse
@@ -13,16 +14,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run the image verification task')
     parser.add_argument('--cost_weighting', type=float, required=True, help='Cost weighting for the routing system')
     parser.add_argument('--config', type=str, required=True, help='Path to the config file')
+    parser.add_argument('--data', type=str, required=True, help='Path to the data')
+    parser.add_argument('--log', type=str, required=True, help='Path to the log file')
     args = parser.parse_args()
     cost_weighting = args.cost_weighting
     config = args.config
     initialize(config)
 
     # Load annotations
-    with open('./data/retrieval_data.json') as f:
+    with open(args.data) as f:
         data = json.load(f)
-
-    log = open(f"./logs/log_{cost_weighting}_new_reward.log", "a+", buffering=1)
+        
+    if not os.path.exists(args.log):
+        os.makedirs(args.log)
+    log = open(os.path.join(args.log, f"log_{cost_weighting}.log"), "a+", buffering=1)
     for i in data:
         set_seed(42)
         log.write(f"Query: {i['query']}\n")
@@ -48,32 +53,30 @@ if __name__ == "__main__":
                 output, execution_counter, execution_trace = execute_routed_program(routed_program, image)
             except Exception as e:
                 warnings.warn(e)
-                log.write(f"Img: {id}; Label: {label}; ViperGPT: {e}; Routing: {routing_idx};\n")
+                log.write(f"Img: {id}; Label: {label}; Output: {e}; Routing: {routing_idx};\n")
                 pbar.update(1)
                 continue
             
-            if not isinstance(output, bool):
-                log.write(f"Img: {id}; Label: {label}; ViperGPT: {output}; Routing: {routing_idx}; Cost: {cost};\n")
-                pbar.update(1)   
-                continue 
-            
-            # reward_mapping = check_execution(execution_trace, routing_system.router.routing_info)
-            reward_mapping = [1 for i in routing_system.router.routing_info]
+            output = postprocessing(output)
+
+            reward_mapping = check_execution(execution_trace, routing_system.router.routing_info)
             cost = execution_cost(execution_counter)
 
-            # if int(output) == int(label):
-            #     reward = 0 # True Positive
-            # else:
-            #     if int(label) == 0:
-            #         reward = -10
-            #     else:
-            #         reward = -1000
-            reward = 100 if int(output) == int(label) else -100
+            if int(label) == 1: # Positive, Minority class
+                if int(output) == int(label):
+                    reward = 100 # True Positive
+                else:
+                    reward = -100 # False Negative, or -200 to penalize more for missed positives
+                
+            elif int(label) == 0: # Negative, Majority class
+                if int(output) == int(label): 
+                    reward = 1 # True Negative
+                else:
+                    reward = -10 # False Positive, or -20 to penalize more for false positives
 
-            # reward = reward - cost_weighting * cost
             routing_system.update_router(image, routing_idx, reward, reward_mapping)
 
-            log.write(f"Img: {id}; Label: {label}; ViperGPT: {output}; Routing: {routing_idx}; Cost: {cost};\n")
+            log.write(f"Img: {id}; Label: {label}; Output: {output}; Routing: {routing_idx}; Cost: {cost};\n")
             pbar.update(1)    
         pbar.close()
 

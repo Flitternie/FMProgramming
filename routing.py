@@ -128,7 +128,7 @@ class Router():
         self.t += 1
         self.algo.update(np.array(context), arm_idx, reward, self.t)
         if self.t % 32 == 0:
-            self.algo.train()
+            self.algo.train(num_epochs=5, batch_size=16)
 
 class StructuredRouter():
     def __init__(self, routing_info, routing_options, cost_weighting=0):
@@ -176,5 +176,5 @@ class StructuredRouter():
         '''
         self.t += 1
         self.algo.update(np.array(context), arm_indices, reward, reward_mapping, self.t)
-        if self.t % 64 == 0:
+        if self.t % 32 == 0:
             self.algo.train(num_epochs=5, batch_size=16)
