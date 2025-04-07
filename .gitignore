@@ -9,7 +9,9 @@ __pycache__/
 logs/
 data/
 misc/
+figures/
 logs/
+simulation/
 COLA/
 coco/
 MSCOCO*/

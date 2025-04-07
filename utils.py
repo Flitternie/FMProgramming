@@ -1,67 +1,62 @@
+import io
+import base64
 import random
 import torch
-import numpy as np 
-from collections import deque, defaultdict
+import numpy as np
+import torchvision.transforms as transforms
 
-'''
-This file contains utility functions for all experiments.
-'''
+"""
+This file contains utility functions used across experiments.
+"""
 
-def set_seed(seed):
-    '''
-    This function sets the seed for reproducibility.
-    '''
+def set_seed(seed: int) -> None:
+    """
+    Set random seed for reproducibility across random, numpy, and torch.
+
+    Args:
+        seed (int): The seed value to be used.
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+    # Ensure deterministic behavior in CUDA operations
     torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
-def order_tree(tree):
-    '''
-    This function orders the tree in a topological order and returns the new tree structure and the index of the root node.
-    '''
-    # Build the graph and compute in-degrees of nodes
-    graph = defaultdict(list)
-    in_degree = defaultdict(int)
-    node_keys = {}
+def load_user_program(code):
+    """
+    Loads a user program from a string of code, and returns the program as a string 
+    along with the function `execute_command` extracted from the code.
 
-    # Assign indices to the nodes based on their position in the list for easy access
-    for idx, (node, children) in enumerate(tree):
-        node_keys[idx] = node
-        for child in children:
-            graph[child].append(idx)
-            in_degree[idx] += 1
+    Args:
+        code (str): String of code that defines the user program.
 
-    # Find all nodes with no incoming edges (roots of the original positions in tree)
-    queue = deque([i for i in range(len(tree)) if in_degree[i] == 0])
-    topological_order = []
-    root_node = None
+    Returns:
+        tuple: A tuple containing:
+            - program_str (str): The original code.
+            - execute_command (Callable): The function `execute_command` from the code.
+    """
+    program_str = code
+    # Execute the program string to create a function
+    exec_globals = {}
+    exec(program_str, exec_globals)
+    return program_str, exec_globals['execute_command']
 
-    # Mapping from old indices to new indices
-    index_mapping = {}
-
-    while queue:
-        node = queue.popleft()
-        index_mapping[node] = len(topological_order)  # Map old index to the current position
-        topological_order.append(node)
-        # In the last iteration, this will be the root node since it's the only node without children processed last
-        root_node = node
-        for neighbor in graph[node]:
-            in_degree[neighbor] -= 1
-            if in_degree[neighbor] == 0:
-                queue.append(neighbor)
-
-    # Check for cycles (which should not happen in a valid tree structure)
-    if len(topological_order) != len(tree):
-        raise Exception("There is a cycle in the tree!")
-
-    # Rebuild tree using the new indices
-    reordered_tree = []
-    for old_index in topological_order:
-        node_name, old_children = tree[old_index]
-        new_children = [index_mapping[child] for child in old_children]
-        reordered_tree.append((node_name, new_children))
-
-    # Return the ordered list of nodes and the index of the root node (new index)
-    return reordered_tree, index_mapping[root_node]
+def encode_base64_content(image) -> str:
+    """
+    Encode an image tensor to base64 format for API transmission.
+    
+    Args:
+        image: A tensor representation of an image.
+        
+    Returns:
+        str: Base64 encoded string of the image in JPEG format.
+    """
+    transform = transforms.ToPILImage()
+    pil_image = transform(image)
+    buffered = io.BytesIO()
+    pil_image.save(buffered, format="JPEG")
+    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return img_str

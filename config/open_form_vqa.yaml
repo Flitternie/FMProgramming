@@ -1,0 +1,52 @@
+debug: False
+object_detection:
+  - name: grounding_dino_swin-t_finetune_16xb2_1x_coco
+    type: TextToBbox
+    device: 0
+    threshold: 0.2
+  - name: grounding_dino_swin-b_finetune_16xb2_1x_coco
+    type: TextToBbox
+    device: 1
+    threshold: 0.2
+vqa:
+  - name: Qwen/Qwen2.5-VL-3B-Instruct
+    type: vllm/VQA
+    cost: 3750
+    api_key: EMPTY
+    base_url: http://128.83.141.189:8001/v1
+    args:
+      prompt: '''
+          Keep your answer short. Try to answer within 3 words. 
+          For numerical answers, use number digits (e.g. 5 instead of five), and returns the number only. 
+          If there are multiple answers, separate them with a comma (e.g. cat, dog).
+          If you find the question unanswerable based on the image content, output "N/A". 
+          For example, if the image content is irrelevant to the question, or the content in the image does not fully and clearly match all the entities, humans, attributes, spatial, logical, and numerical constraints in the question, output "N/A"
+          '''
+      temperature: 0.0
+      seed: 42  
+  - name: Qwen/Qwen2.5-VL-72B-Instruct
+    type: vllm/VQA
+    cost: 73400
+    api_key: EMPTY
+    base_url: http://128.83.141.189:8000/v1
+    args:
+      prompt: '''
+          Keep your answer short. Try to answer within 3 words. 
+          For numerical answers, use number digits (e.g. 5 instead of five), and returns the number only. 
+          If there are multiple answers, separate them with a comma (e.g. cat, dog).
+          If you find the question unanswerable based on the image content, output "N/A". 
+          For example, if the image content is irrelevant to the question, or the content in the image does not fully and clearly match all the entities, humans, attributes, spatial, logical, and numerical constraints in the question, output "N/A"
+          '''
+      temperature: 0.0
+      seed: 42 
+llm:
+  - name: meta-llama/Meta-Llama-3.1-8B-Instruct
+    url: https://api.deepinfra.com/v1/openai
+    cost: 8000
+    temperature: 0
+    prompt: You are a helpful assistant. You need to answer the question and keep it as short and simple as possible, without any explainations. For example, if the question is about the capital of France, you answer 'Paris'. If the question is about a certain number, return only the number.
+  - name: meta-llama/Llama-3.3-70B-Instruct
+    url: https://api.deepinfra.com/v1/openai
+    cost: 70000
+    temperature: 0
+    prompt: You are a helpful assistant. You need to answer the question and keep it as short and simple as possible, without any explainations. For example, if the question is about the capital of France, you answer 'Paris'. If the question is about a certain number, return only the number.

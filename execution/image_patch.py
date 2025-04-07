@@ -1,73 +1,67 @@
 from __future__ import annotations
 
 import re
+import warnings
+from typing import Union, List
+
 import numpy as np
 import torch
 from PIL import Image
 from torchvision import transforms
 from torchvision.ops import box_iou
-from typing import Union, List
 from word2number import w2n
-import warnings
 
-from execution.modules import *
+from execution.modules import object_detection, vqa, llm
 from execution.utils import show_single_image
 
+"""
+This file defines the ImagePatch class, inspired by the implementation in the ViperGPT repository.
+"""
 
 class ImagePatch:
-    """A Python class containing a crop of an image centered around a particular object, as well as relevant
-    information.
+    """
+    Represents a crop of an image and supports detection, querying, and visual reasoning.
+
     Attributes
     ----------
-    cropped_image : array_like
-        An array-like of the cropped image taken from the original image.
-    left : int
-        An int describing the position of the left border of the crop's bounding box in the original image.
-    lower : int
-        An int describing the position of the bottom border of the crop's bounding box in the original image.
-    right : int
-        An int describing the position of the right border of the crop's bounding box in the original image.
-    upper : int
-        An int describing the position of the top border of the crop's bounding box in the original image.
-
-    Methods
-    -------
-    find(object_name: str)->List[ImagePatch]
-        Returns a list of new ImagePatch objects containing crops of the image centered around any objects found in the
-        image matching the object_name.
-    exists(object_name: str)->bool
-        Returns True if the object specified by object_name is found in the image, and False otherwise.
-    verify_property(object_name: str, attribute: str)->bool
-        Returns True if the property is met, and False otherwise.
-    query(question: str=None)->str
-        Returns the answer to a basic question asked about the image. If no question is provided, returns the answer
-        to "What is this?".
-    crop(left: int, lower: int, right: int, upper: int)->ImagePatch
-        Returns a new ImagePatch object containing a crop of the image at the given coordinates.
+    cropped_image : torch.Tensor
+        Cropped image tensor (C x H x W).
+    left, lower, right, upper : int
+        Coordinates of the crop relative to the original image.
+    height, width : int
+        Dimensions of the cropped image.
+    horizontal_center, vertical_center : float
+        Center point of the crop (used for sorting, comparison).
     """
 
-    def __init__(self, image: Union[Image.Image, torch.Tensor, np.ndarray], left: int = None, lower: int = None,
-                 right: int = None, upper: int = None, parent_left=0, parent_lower=0, queues=None,
-                 parent_img_patch=None):
-        """Initializes an ImagePatch object by cropping the image at the given coordinates and stores the coordinates as
-        attributes. If no coordinates are provided, the image is left unmodified, and the coordinates are set to the
-        dimensions of the image.
+    def __init__(
+        self,
+        image: Union[Image.Image, torch.Tensor, np.ndarray],
+        left: int = None,
+        lower: int = None,
+        right: int = None,
+        upper: int = None,
+        parent_left=0,
+        parent_lower=0,
+        queues=None,
+        parent_img_patch=None
+    ):
+        """
+        Initialize an ImagePatch from a given image or tensor and optional crop coordinates.
 
         Parameters
-        -------
-        image : array_like
-            An array-like of the original image.
-        left : int
-            An int describing the position of the left border of the crop's bounding box in the original image.
-        lower : int
-            An int describing the position of the bottom border of the crop's bounding box in the original image.
-        right : int
-            An int describing the position of the right border of the crop's bounding box in the original image.
-        upper : int
-            An int describing the position of the top border of the crop's bounding box in the original image.
-
+        ----------
+        image : Image.Image, torch.Tensor, or np.ndarray
+            The full image or sub-region to initialize the patch from.
+        left, lower, right, upper : int, optional
+            Crop coordinates (relative to the image) to extract the patch.
+        parent_left, parent_lower : int, optional
+            Relative offset if this patch is a crop from another patch.
+        queues : tuple, optional
+            Reserved for task-specific asynchronous use.
+        parent_img_patch : ImagePatch, optional
+            Parent patch from which this one is cropped (if applicable).
         """
-
         if isinstance(image, Image.Image):
             image = transforms.ToTensor()(image)
         elif isinstance(image, np.ndarray):
@@ -75,173 +69,200 @@ class ImagePatch:
         elif isinstance(image, torch.Tensor) and image.dtype == torch.uint8:
             image = image / 255
 
-        if left is None and right is None and upper is None and lower is None:
+        if all(v is None for v in [left, lower, right, upper]):
             self.cropped_image = image
-            self.left = 0
-            self.lower = 0
-            self.right = image.shape[2]  # width
-            self.upper = image.shape[1]  # height
+            self.left, self.lower = 0, 0
+            self.right, self.upper = image.shape[2], image.shape[1]
         else:
             self.cropped_image = image[:, lower:upper, left:right]
-            self.left = left
-            self.upper = upper
-            self.right = right 
-            self.lower = lower
+            self.left, self.lower = left, lower
+            self.right, self.upper = right, upper
 
         self.height = self.cropped_image.shape[1]
         self.width = self.cropped_image.shape[2]
 
-        self.cache = {}
-        self.queues = (None, None) if queues is None else queues
-
-        self.parent_img_patch = parent_img_patch
+        if self.height == 0 or self.width == 0:
+            raise ValueError("ImagePatch has no area.")
 
         self.horizontal_center = (self.left + self.right) / 2
         self.vertical_center = (self.lower + self.upper) / 2
-
-        if self.cropped_image.shape[1] == 0 or self.cropped_image.shape[2] == 0:
-            raise Exception("ImagePatch has no area")
-
+        self.queues = (None, None) if queues is None else queues
+        self.parent_img_patch = parent_img_patch
+        self.cache = {}
 
     @property
     def original_image(self):
+        """Returns the full original image this patch is derived from."""
         if self.parent_img_patch is None:
             return self.cropped_image
-        else:
-            return self.parent_img_patch.original_image
+        return self.parent_img_patch.original_image
 
-    def find(self, object_name: str, routing: int) -> list[ImagePatch]:
-        """Returns a list of ImagePatch objects matching object_name contained in the crop if any are found.
-        Otherwise, returns an empty list.
+    def find(self, object_name: str, routing: int) -> List[ImagePatch]:
+        """
+        Detect instances of an object in the patch.
+
         Parameters
         ----------
         object_name : str
-            the name of the object to be found
+            Name of the object to detect.
+        routing : int
+            Index of the model to route to.
 
         Returns
         -------
         List[ImagePatch]
-            a list of ImagePatch objects matching object_name contained in the crop
+            List of patches for each detected object.
         """
-        all_object_coordinates = object_detection(self.cropped_image, object_name, routing)
-        if len(all_object_coordinates) == 0:
-            return []
-
-        cropped_images = []
-        for coordinates in all_object_coordinates:
+        coords = object_detection(self.cropped_image, object_name, routing)
+        patches = []
+        for c in coords:
             try:
-                cropped_images.append(self.crop(*coordinates))
+                patches.append(self.crop(*c))
             except:
-                warnings.warn("Invalid coordinates found in object detection")
-        return cropped_images
+                warnings.warn("Invalid coordinates in object detection.")
+        return patches
 
     def exists(self, object_name: str, routing: int) -> bool:
-        """Returns True if the object specified by object_name is found in the image, and False otherwise.
-        Parameters
-        -------
-        object_name : str
-            A string describing the name of the object to be found in the image.
         """
-        if object_name.isdigit() or object_name.lower().startswith("number"):
-            object_name = object_name.lower().replace("number", "").strip()
+        Check if a specific object exists in the patch.
 
-            object_name = w2n.word_to_num(object_name)
-            answer = self.query("What number is written in the image (in digits)?", routing=routing)
-            return w2n.word_to_num(answer) == object_name
-
-        patches = self.find(object_name, routing=routing)
-        return len(patches) > 0
-
-
-    def verify_property(self, object_name: str, attribute: str, routing: int) -> bool:
-        """Returns True if the object possesses the property, and False otherwise.
-        Differs from 'exists' in that it presupposes the existence of the object specified by object_name, instead
-        checking whether the object possesses the property.
-        Parameters
-        -------
-        object_name : str
-            A string describing the name of the object to be found in the image.
-        attribute : str
-            A string describing the property to be checked.
-        """
-        name = f"is this {object_name} {attribute} ?"
-        return "yes" in self.query(name, routing=routing).lower()
-
-    def query(self, question: str, routing: int) -> str:
-        """Returns the answer to a basic question asked about the image. If no question is provided, returns the answer
-        to "What is this?". The questions are about basic perception, and are not meant to be used for complex reasoning
-        or external knowledge.
-        Parameters
-        -------
-        question : str
-            A string describing the question to be asked.
-        """
-        return vqa(self.cropped_image, question, routing)
-
-    def crop(self, left: int, lower: int, right: int, upper: int) -> ImagePatch:
-        """Returns a new ImagePatch containing a crop of the original image at the given coordinates.
         Parameters
         ----------
-        left : int
-            the position of the left border of the crop's bounding box in the original image
-        lower : int
-            the position of the bottom border of the crop's bounding box in the original image
-        right : int
-            the position of the right border of the crop's bounding box in the original image
-        upper : int
-            the position of the top border of the crop's bounding box in the original image
-
-        Returns
-        -------
-        ImagePatch
-            a new ImagePatch containing a crop of the original image at the given coordinates
-        """
-        # make all inputs ints
-        left = int(left)
-        lower = int(lower)
-        right = int(right)
-        upper = int(upper)
-
-        return ImagePatch(self.cropped_image, left, lower, right, upper, self.left, self.lower, queues=self.queues,
-                              parent_img_patch=self)
-
-    def overlaps_with(self, left, lower, right, upper):
-        """Returns True if a crop with the given coordinates overlaps with this one,
-        else False.
-        Parameters
-        ----------
-        left : int
-            the left border of the crop to be checked
-        lower : int
-            the lower border of the crop to be checked
-        right : int
-            the right border of the crop to be checked
-        upper : int
-            the upper border of the crop to be checked
+        object_name : str
+            Name or numeric representation of the object.
+        routing : int
+            Model routing index.
 
         Returns
         -------
         bool
-            True if a crop with the given coordinates overlaps with this one, else False
+            True if the object exists in the patch.
+        """
+        if object_name.isdigit() or object_name.lower().startswith("number"):
+            val = w2n.word_to_num(object_name.lower().replace("number", "").strip())
+            answer = self.query("What number is written in the image (in digits)?", routing=routing) # Note: Nested method call
+            return w2n.word_to_num(answer) == val
+
+        return len(self.find(object_name, routing=routing)) > 0 # Note: Nested method call
+
+    def verify_property(self, object_name: str, attribute: str, routing: int) -> bool:
+        """
+        Check if a specific object in the patch has a given visual attribute.
+
+        Parameters
+        ----------
+        object_name : str
+            Object of interest.
+        attribute : str
+            Attribute to verify.
+        routing : int
+            Model routing index.
+
+        Returns
+        -------
+        bool
+            True if the attribute is verified for the object.
+        """
+        query = f"is this {object_name} {attribute} ?"
+        return "yes" in self.query(query, routing=routing).lower() # Note: Nested method call
+
+    def query(self, question: str, routing: int) -> str:
+        """
+        Ask a visual question about the image content.
+
+        Parameters
+        ----------
+        question : str
+            Visual question to ask.
+        routing : int
+            Model routing index.
+
+        Returns
+        -------
+        str
+            Answer from the VQA model.
+        """
+        return vqa(self.cropped_image, question, routing)
+
+    def crop(self, left: int, lower: int, right: int, upper: int) -> ImagePatch:
+        """
+        Crop a sub-region of the current patch and return it as a new ImagePatch.
+
+        Parameters
+        ----------
+        left, lower, right, upper : int
+            Coordinates of the desired sub-region.
+
+        Returns
+        -------
+        ImagePatch
+        """
+        return ImagePatch(
+            self.cropped_image,
+            int(left), int(lower), int(right), int(upper),
+            self.left, self.lower,
+            queues=self.queues,
+            parent_img_patch=self
+        )
+
+    def overlaps_with(self, left: int, lower: int, right: int, upper: int) -> bool:
+        """
+        Check if a bounding box overlaps with this patch.
+
+        Returns
+        -------
+        bool
+            True if overlapping.
         """
         return self.left <= right and self.right >= left and self.lower <= upper and self.upper >= lower
 
     def llm_query(self, question: str, routing: int) -> str:
+        """
+        Ask a language model a question using external knowledge.
+
+        Parameters
+        ----------
+        question : str
+            The text-based question.
+        routing : int
+            Model routing index.
+
+        Returns
+        -------
+        str
+            Answer from the language model.
+        """
         return llm(question, routing)
 
     def show(self, size: tuple[int, int] = None):
+        """
+        Display the cropped image using matplotlib or IPython.
+
+        Parameters
+        ----------
+        size : tuple, optional
+            Target display size (width, height).
+        """
         show_single_image(self.cropped_image, size)
 
     def __repr__(self):
-        return "ImagePatch({}, {}, {}, {})".format(self.left, self.lower, self.right, self.upper)
+        return f"ImagePatch({self.left}, {self.lower}, {self.right}, {self.upper})"
 
 
 def distance(patch_a: Union[ImagePatch, float], patch_b: Union[ImagePatch, float]) -> float:
     """
-    Returns the distance between the edges of two ImagePatches, or between two floats.
-    If the patches overlap, it returns a negative distance corresponding to the negative intersection over union.
-    """
+    Compute the distance between two ImagePatches or two float values.
 
+    If patches overlap, returns a negative IoU-based distance.
+
+    Parameters
+    ----------
+    patch_a, patch_b : ImagePatch or float
+
+    Returns
+    -------
+    float
+    """
     if isinstance(patch_a, ImagePatch) and isinstance(patch_b, ImagePatch):
         a_min = np.array([patch_a.left, patch_a.lower])
         a_max = np.array([patch_a.right, patch_a.upper])
@@ -250,55 +271,60 @@ def distance(patch_a: Union[ImagePatch, float], patch_b: Union[ImagePatch, float
 
         u = np.maximum(0, a_min - b_max)
         v = np.maximum(0, b_min - a_max)
-
         dist = np.sqrt((u ** 2).sum() + (v ** 2).sum())
 
         if dist == 0:
             box_a = torch.tensor([patch_a.left, patch_a.lower, patch_a.right, patch_a.upper])[None]
             box_b = torch.tensor([patch_b.left, patch_b.lower, patch_b.right, patch_b.upper])[None]
-            dist = - box_iou(box_a, box_b).item()
-
+            dist = -box_iou(box_a, box_b).item()
     else:
         dist = abs(patch_a - patch_b)
 
     return dist
 
 
-def to_numeric(string, no_string=False):
+def to_numeric(string: str, no_string: bool = False):
     """
-    Converts a string to a numeric value if possible.
-    """
+    Convert a string to an int or float, if possible. Supports:
+    - Raw numbers
+    - Word numbers (e.g., "two")
+    - Strings with units (e.g., "5cm")
 
+    Parameters
+    ----------
+    string : str
+        Input to convert.
+    no_string : bool
+        If True, raises exception instead of returning original string when numeric conversion fails.
+
+    Returns
+    -------
+    int, float, or str
+    """
     try:
-        # If it is a word number (e.g. 'zero')
-        numeric = w2n.word_to_num(string)
-        return numeric
+        return int(string)
+    except ValueError:
+        pass
+    try:
+        return float(string)
     except ValueError:
         pass
 
-    # Remove any non-numeric characters except the decimal point and the negative sign
-    string_re = re.sub("[^0-9\.\-]", "", string)
+    try:
+        return w2n.word_to_num(string)
+    except ValueError:
+        pass
 
-    if string_re.startswith('-'):
-        string_re = '&' + string_re[1:]
+    # Clean up unwanted characters
+    string_re = re.sub("[^0-9.\-]", "", string)
+    string_re = string_re.replace('&', '-') if string_re.startswith('-') else string_re
 
-    # Check if the string includes a range
-    if "-" in string_re:
-        # Split the string into parts based on the dash character
-        parts = string_re.split("-")
-        return to_numeric(parts[0].replace('&', '-'))
-    else:
-        string_re = string_re.replace('&', '-')
+    if '-' in string_re:
+        return to_numeric(string_re.split('-')[0], no_string=no_string)
 
     try:
-        # Convert the string to a float or int depending on whether it has a decimal point
-        if "." in string_re:
-            numeric = float(string_re)
-        else:
-            numeric = int(string_re)
-    except:
+        return float(string_re) if '.' in string_re else int(string_re)
+    except ValueError:
         if no_string:
-            raise ValueError
-        # No numeric values. Return input
+            raise ValueError(f"Cannot convert {string} to numeric.")
         return string
-    return numeric

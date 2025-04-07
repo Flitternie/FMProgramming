@@ -1,23 +1,20 @@
+debug: False
 object_detection:
-  - name: rtmdet_tiny_8xb32-300e_coco
-    type: ObjectDetection
+  - name: glip_atss_swin-t_b_fpn_dyhead_pretrain_obj365
+    type: TextToBbox
     device: 0
-    threshold: 0.1
-    cost: 5 
-  - name: grounding_dino_swin-b_finetune_16xb2_1x_coco
-    type: "TextToBbox"
+    threshold: 0.5
+  - name: glip_atss_swin-l_fpn_dyhead_16xb2_ms-2x_funtune_coco
+    type: TextToBbox
     device: 1
-    threshold: 0.25
-    cost: 233
+    threshold: 0.7
 vqa:
   - name: ofa-base_3rdparty-zeroshot_vqa
     type: VQA
     device: 1
-    cost: 182
   - name: blip2-opt2.7b_3rdparty-zeroshot_vqa
     type: VQA
     device: 0
-    cost: 3770
 llm:
   - name: meta-llama/Meta-Llama-3.1-8B-Instruct
     url: https://api.deepinfra.com/v1/openai
