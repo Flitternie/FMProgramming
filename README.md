@@ -4,19 +4,6 @@ A modular framework for **cost-efficient inference** in complex multi-modal task
 
 ---
 
-## 📚 Table of Contents  
-- [Overview](#overview)  
-- [Project Structure](#project-structure)  
-- [Installation](#installation)  
-- [Usage](#usage)  
-  - [Run Streaming Verification](#run-streaming-verification)  
-  - [Configuration](#configuration)  
-- [Data Format](#data-format)  
-- [Benchmarks](#benchmarks)  
-- [Acknowledgments](#acknowledgments)
-
----
-
 ## 🌟 Overview  
 
 This repository implements a neurosymbolic execution system where user queries are compiled into Python-like **Foundation Model Programs**. Each program is composed of generic neural functions (e.g., object detection, VQA) and dynamically chooses among multiple backend models during inference.
@@ -43,11 +30,8 @@ Use Cases:
 │   ├── binary_vqa_supp.yaml  # FM backend and hyperparameter configurations for Streaming Binary VQA experiments (supplementary)
 │   └── open_form_vqa.yaml    # FM backend and hyperparameter configurations for Streaming Open-Form VQA experiments
 ├── 📁data                    # Input data and saved retrieval images
-│   ├── code_generation.ipynb
-│   ├── dsl.prompt            # DSL prompt template for generating user programs
-│   ├── openai.key            # OpenAI API key (don't commit this!)
-│   ├── verification.json     # Dataset annotations and queries
-│   └── 📁saved_retrieval_imgs # Cached positive/negative image tensors
+│   ├── binary_vqa.json       # Dataset annotations and queries for the Streaming Binary VQA task
+│   ├── 📁open_form_vqa       # Dataset annotations and queries for the Streaming Open-Form VQA task
 ├── 📁execution               # Core execution modules
 │   ├── backend.py            # Routing backend & program execution engine
 │   ├── image_patch.py        # ImagePatch class & spatial reasoning
@@ -90,14 +74,25 @@ unzip train2017.zip && unzip val2017.zip
 
 ---
 
+## 📄 Benchmarks
+
+Download binary VQA and open-form VQA benchmarks:
+```bash
+cd data
+wget https://utexas.box.com/shared/static/rdcykkjg41i2rfo7itna4tvrygbmzkct.json -O binary_vqa.json
+wget https://utexas.box.com/shared/static/p62xf6oqrp92zeboj8kyne21mbeej6pv.zip -O open_form_vqa.zip && unzip open_form_vqa.zip
+```
+
+---
+
 ## 🚀 Usage
 
-### Run Streaming Verification
+### Run Streaming Binary VQA
 ```bash
 python main_verification.py \
-  --cost_weighting 0.1 0.5 1.0 \
-  --config config/verification.yaml \
-  --data data/verification.json \
+  --cost_weighting 0.001 0.003 0.005 \
+  --config config/binary_vqa.yaml \
+  --data data/binary_vqa.json \
   --log logs/
 ```
 
@@ -108,33 +103,34 @@ python main_verification.py \
 | `--data`           | JSON file with query/image annotations.            |
 | `--log`            | Logging directory.                                 |
 
+### Run Streaming Open-form VQA
+```bash
+python main_vqa.py \
+  --cost_weighting 0.001 0.003 0.005 \
+  --config config/open_form_vqa.yaml \
+  --data data/open_form_vqa \
+  --log logs/
+```
+
+| Flag             | Description                                         |
+|------------------|-----------------------------------------------------|
+| `--cost_weighting` | Trade-off between accuracy and cost.               |
+| `--config`         | Program + backend routing YAML.                    |
+| `--data`           | Root directory of open-form VQA data               |
+| `--log`            | Logging directory.                                 |
+| `--type`           | Query categories to evaluate. Default to all.      |
+
+
 ---
 
-### Configuration
+### ⚙️ Configuration
 
 - Backend model selection, routing policy, and program control flow are defined in `config/`.
 - Supports:
   - MMDetection (object detection)
   - HuggingFace / vLLM (LLMs and VLMs)
   - AgentLego (tool-based execution)
-  - OpenAI/Remote APIs (via `openai.key` or `api.key`)
-
----
-
-## 📄 Data Format
-
-### `verification.json`
-```json
-{
-  "query": "Are there at least four horses on a beach?",
-  "code": "def execute_command(image): ...",
-  "positive_images": [101, 205],
-  "negative_images": [109, 320]
-}
-```
-
-- DSL-style or auto-generated Python code represents reasoning structure.
-- Each query maps to a sequence of images.
+  - OpenAI/Remote APIs
 
 ---
 
