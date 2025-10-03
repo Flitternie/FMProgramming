@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Resource-efficient Foundation Model Programs</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fa;
+      --fg: #111827;
+      --accent: #4c51bf;
+      --accent-soft: rgba(76, 81, 191, 0.12);
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+    }
+    header {
+      padding: 4rem 1.5rem 3rem;
+      text-align: center;
+      background: linear-gradient(145deg, #eef2ff, #fdf2f8);
+    }
+    header h1 {
+      font-size: clamp(2.2rem, 4vw, 3rem);
+      margin-bottom: 0.75rem;
+      color: var(--accent);
+    }
+    header p {
+      max-width: 56rem;
+      margin: 0 auto;
+      font-size: 1.1rem;
+      color: rgba(17, 24, 39, 0.75);
+    }
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 1.5rem 4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 3rem;
+    }
+    section {
+      background: white;
+      border-radius: 22px;
+      padding: 2rem;
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+    }
+    h2 {
+      font-size: 1.6rem;
+      margin-top: 0;
+      margin-bottom: 1.25rem;
+      color: var(--accent);
+    }
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .pill-list li {
+      padding: 0.55rem 0.95rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    figure {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    figure img {
+      width: 100%;
+      border-radius: 18px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+    }
+    figcaption {
+      font-size: 0.95rem;
+      color: rgba(17, 24, 39, 0.7);
+    }
+    .grid {
+      display: grid;
+      gap: 1.75rem;
+    }
+    .grid.two {
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      align-items: start;
+    }
+    .grid.three {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    .badge-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .badge {
+      padding: 0.85rem 1rem;
+      border-radius: 16px;
+      background: #f8fafc;
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      font-weight: 500;
+    }
+    footer {
+      text-align: center;
+      padding: 2.5rem 1rem 3rem;
+      color: rgba(17, 24, 39, 0.6);
+      font-size: 0.95rem;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    @media (max-width: 640px) {
+      header {
+        padding: 3rem 1rem 2.5rem;
+      }
+      section {
+        padding: 1.75rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Resource-efficient Foundation Model Programs</h1>
+    <p>Program-guided multimodal reasoning that learns to route tasks across foundation model backends, delivering up to 98% cost savings with minimal accuracy loss on streaming VQA benchmarks.</p>
+  </header>
+  <main>
+    <section>
+      <h2>Workflow at a Glance</h2>
+      <ul class="pill-list">
+        <li>Program synthesis captures task structure</li>
+        <li>Gradient Thompson Sampling adapts to inputs</li>
+        <li>Structured REINFORCE allocates resources</li>
+        <li>Lightweight detectors screen easy cases</li>
+        <li>High-capacity MLLMs reserved for hard queries</li>
+      </ul>
+    </section>
+
+    <section>
+      <div class="grid two" style="align-items:center;">
+        <figure>
+          <img src="https://arxiv.org/html/2504.07247v2/x1.png" alt="Foundation model program illustration from the paper." loading="lazy" />
+          <figcaption>FMPs decompose VQA workflows and selectively invoke capable models only when needed, reducing unnecessary compute.</figcaption>
+        </figure>
+        <div class="badge-group">
+          <div class="badge">Offline synthesis produces modular programs with conditional control flow tailored to each query.</div>
+          <div class="badge">Online policy observes intermediate signals and switches between backends with differing latency and accuracy.</div>
+          <div class="badge">Feedback after each streamed example continuously refines routing for future inputs.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Streaming Benchmarks</h2>
+      <div class="grid two">
+        <div class="badge-group">
+          <div class="badge"><strong>Streaming Binary VQA:</strong> 33 compositional queries &gt;2K images each, testing spatial, logical, and numerical reasoning over sequences.</div>
+          <div class="badge"><strong>Streaming Open-form VQA:</strong> 50 diverse prompts with diffusion-generated imagery, including unanswerable distractors to probe robustness.</div>
+        </div>
+        <figure>
+          <img src="https://arxiv.org/html/2504.07247v2/x2.png" alt="Benchmark illustration from the paper." loading="lazy" />
+          <figcaption>Examples from the streaming open-form VQA benchmark curated to stress long-tail reasoning and adversarial scenarios.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section>
+      <h2>Cost-accuracy Frontiers</h2>
+      <div class="grid two">
+        <figure>
+          <img src="https://arxiv.org/html/2504.07247v2/x3.png" alt="Pareto frontier for streaming binary VQA." loading="lazy" />
+          <figcaption>Binary VQA: Structured policies reach the accuracy of the largest MLLM while cutting compute by over 98%.</figcaption>
+        </figure>
+        <figure>
+          <img src="https://arxiv.org/html/2504.07247v2/x4.png" alt="Pareto frontier breakdown for binary VQA." loading="lazy" />
+          <figcaption>FMP Pareto frontier (green) dominates random routing and model-only baselines in low-cost regimes.</figcaption>
+        </figure>
+      </div>
+      <figure style="margin-top:1.75rem;">
+        <img src="https://arxiv.org/html/2504.07247v2/x5.png" alt="Results on streaming open-form VQA." loading="lazy" />
+        <figcaption>Open-form VQA: Dynamic backend selection saves up to 50% cost without sacrificing accuracy compared to large MLLMs.</figcaption>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Key Takeaways</h2>
+      <div class="grid three">
+        <div class="badge">FMPs provide a modality-agnostic recipe for composing heterogeneous models into executable reasoning programs.</div>
+        <div class="badge">Structured REINFORCE with Thompson sampling offers no-regret online learning for per-module backend routing.</div>
+        <div class="badge">Empirical results show consistent Pareto dominance across benchmarks, even with constrained backend pools.</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Project &amp; Citation</h2>
+      <div class="grid two">
+        <div class="badge-group">
+          <div class="badge"><strong>Authors:</strong> Lydia T. Nie, Kevin Yu, Marco Cheung, Christopher Jermaine, Swarat Chaudhuri</div>
+          <div class="badge"><strong>Institutions:</strong> The University of Texas at Austin &amp; Rice University</div>
+          <div class="badge">Presented in “Resource-efficient Inference with Foundation Model Programs”.</div>
+        </div>
+        <div class="badge-group">
+          <div class="badge">Read the paper: <a href="https://arxiv.org/abs/2504.07247">arXiv:2504.07247</a></div>
+          <div class="badge">Code &amp; benchmarks: <a href="https://github.com/Flitternie/FMProgramming">github.com/Flitternie/FMProgramming</a></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer>
+    Content and imagery reproduced from the arXiv paper “Resource-efficient Inference with Foundation Model Programs” (2025).
+  </footer>
+</body>
+</html>
