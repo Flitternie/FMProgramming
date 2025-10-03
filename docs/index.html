@@ -34,9 +34,34 @@
     }
     header p {
       max-width: 56rem;
-      margin: 0 auto;
+      margin: 0.5rem auto 1.5rem;
       font-size: 1.1rem;
       color: rgba(17, 24, 39, 0.75);
+    }
+    .cta-buttons {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .cta-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.65rem 1.15rem;
+      border-radius: 999px;
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+      font-size: 0.95rem;
+      box-shadow: 0 10px 25px rgba(76, 81, 191, 0.25);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .cta-button:hover {
+      text-decoration: none;
+      transform: translateY(-1px);
+      box-shadow: 0 16px 30px rgba(76, 81, 191, 0.28);
     }
     main {
       max-width: 1080px;
@@ -82,8 +107,7 @@
     }
     figure img {
       width: 100%;
-      border-radius: 18px;
-      border: 1px solid rgba(15, 23, 42, 0.08);
+      border: 1px solid rgba(15, 23, 42, 0.12);
     }
     figcaption {
       font-size: 0.95rem;
@@ -139,10 +163,15 @@
   <header>
     <h1>Resource-efficient Foundation Model Programs</h1>
     <p>Program-guided multimodal reasoning that learns to route tasks across foundation model backends, delivering up to 98% cost savings with minimal accuracy loss on streaming VQA benchmarks.</p>
+    <div class="cta-buttons">
+      <a class="cta-button" href="https://arxiv.org/abs/2504.07247" target="_blank" rel="noopener">📄 Paper</a>
+      <a class="cta-button" href="https://github.com/Flitternie/FMProgramming" target="_blank" rel="noopener">💻 Code</a>
+      <a class="cta-button" href="https://arxiv.org/html/2504.07247v2#S4" target="_blank" rel="noopener">📦 Dataset</a>
+    </div>
   </header>
   <main>
     <section>
-      <h2>Workflow at a Glance</h2>
+      <h2>Key Takeaways</h2>
       <ul class="pill-list">
         <li>Program synthesis captures task structure</li>
         <li>Gradient Thompson Sampling adapts to inputs</li>
@@ -153,16 +182,16 @@
     </section>
 
     <section>
-      <div class="grid two" style="align-items:center;">
-        <figure>
-          <img src="https://arxiv.org/html/2504.07247v2/x1.png" alt="Foundation model program illustration from the paper." loading="lazy" />
-          <figcaption>FMPs decompose VQA workflows and selectively invoke capable models only when needed, reducing unnecessary compute.</figcaption>
-        </figure>
-        <div class="badge-group">
-          <div class="badge">Offline synthesis produces modular programs with conditional control flow tailored to each query.</div>
-          <div class="badge">Online policy observes intermediate signals and switches between backends with differing latency and accuracy.</div>
-          <div class="badge">Feedback after each streamed example continuously refines routing for future inputs.</div>
-        </div>
+      <h2>Program-guided Routing</h2>
+      <figure>
+        <img src="https://arxiv.org/html/2504.07247v2/x1.png" alt="Foundation model program illustration from the paper." loading="lazy" />
+        <figcaption>Foundation Model Programs orchestrate detectors, filters, and vision-language models through modular control flow to reduce redundant inference.</figcaption>
+      </figure>
+      <div class="grid two" style="margin-top: 1.75rem;">
+        <div class="badge">Offline synthesis produces modular branches with early-exit conditions learned from demonstrations.</div>
+        <div class="badge">Online routing observes intermediate rewards, applying Gradient Thompson Sampling to select the most cost-effective backend.</div>
+        <div class="badge">Streaming feedback updates module preferences after each example, shrinking reliance on expensive models over time.</div>
+        <div class="badge">Program structure generalizes across tasks, allowing detectors and VLMs to be swapped in without retraining policies.</div>
       </div>
     </section>
 
@@ -181,33 +210,6 @@
     </section>
 
     <section>
-      <h2>Cost-accuracy Frontiers</h2>
-      <div class="grid two">
-        <figure>
-          <img src="https://arxiv.org/html/2504.07247v2/x3.png" alt="Pareto frontier for streaming binary VQA." loading="lazy" />
-          <figcaption>Binary VQA: Structured policies reach the accuracy of the largest MLLM while cutting compute by over 98%.</figcaption>
-        </figure>
-        <figure>
-          <img src="https://arxiv.org/html/2504.07247v2/x4.png" alt="Pareto frontier breakdown for binary VQA." loading="lazy" />
-          <figcaption>FMP Pareto frontier (green) dominates random routing and model-only baselines in low-cost regimes.</figcaption>
-        </figure>
-      </div>
-      <figure style="margin-top:1.75rem;">
-        <img src="https://arxiv.org/html/2504.07247v2/x5.png" alt="Results on streaming open-form VQA." loading="lazy" />
-        <figcaption>Open-form VQA: Dynamic backend selection saves up to 50% cost without sacrificing accuracy compared to large MLLMs.</figcaption>
-      </figure>
-    </section>
-
-    <section>
-      <h2>Key Takeaways</h2>
-      <div class="grid three">
-        <div class="badge">FMPs provide a modality-agnostic recipe for composing heterogeneous models into executable reasoning programs.</div>
-        <div class="badge">Structured REINFORCE with Thompson sampling offers no-regret online learning for per-module backend routing.</div>
-        <div class="badge">Empirical results show consistent Pareto dominance across benchmarks, even with constrained backend pools.</div>
-      </div>
-    </section>
-
-    <section>
       <h2>Project &amp; Citation</h2>
       <div class="grid two">
         <div class="badge-group">
@@ -216,8 +218,13 @@
           <div class="badge">Presented in “Resource-efficient Inference with Foundation Model Programs”.</div>
         </div>
         <div class="badge-group">
-          <div class="badge">Read the paper: <a href="https://arxiv.org/abs/2504.07247">arXiv:2504.07247</a></div>
-          <div class="badge">Code &amp; benchmarks: <a href="https://github.com/Flitternie/FMProgramming">github.com/Flitternie/FMProgramming</a></div>
+          <pre id="bibtex" style="margin:0; padding:1.25rem; background:#f8fafc; border:1px solid rgba(15,23,42,0.08); border-radius:12px; font-size:0.9rem; overflow-x:auto;">@article{nie2025resource,
+  title={Resource-efficient Inference with Foundation Model Programs},
+  author={Nie, Lunyiu and Ding, Zhimin and Yu, Kevin and Cheung, Marco and Jermaine, Chris and Chaudhuri, Swarat},
+  journal={arXiv preprint arXiv:2504.07247},
+  year={2025}
+}</pre>
+          <button id="copy-bibtex" class="cta-button" style="align-self:flex-start;">📋 Copy BibTeX</button>
         </div>
       </div>
     </section>
@@ -225,5 +232,18 @@
   <footer>
     Content and imagery reproduced from the arXiv paper “Resource-efficient Inference with Foundation Model Programs” (2025).
   </footer>
+  <script>
+    document.getElementById("copy-bibtex").addEventListener("click", () => {
+      const text = document.getElementById("bibtex").innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById("copy-bibtex");
+        const original = btn.textContent;
+        btn.textContent = "✅ Copied";
+        setTimeout(() => {
+          btn.textContent = original;
+        }, 1600);
+      });
+    });
+  </script>
 </body>
 </html>
