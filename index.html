@@ -18,18 +18,17 @@
     body {
       margin: 0;
       font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
-      background: var(--bg);
+      background: linear-gradient(145deg, #eef2ff, #fdf2f8);
       color: var(--fg);
       line-height: 1.6;
     }
     header {
-      padding: 4rem 1.5rem 3rem;
+      padding: 4rem 1.5rem 4rem;
       text-align: center;
-      background: linear-gradient(145deg, #eef2ff, #fdf2f8);
     }
     header h1 {
       font-size: clamp(2.2rem, 4vw, 3rem);
-      margin-bottom: 0.75rem;
+      margin-bottom: 1.5rem;
       color: var(--accent);
     }
     header p {
@@ -43,7 +42,8 @@
       justify-content: center;
       flex-wrap: wrap;
       gap: 0.75rem;
-      margin-bottom: 1.5rem;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
     }
     .cta-button {
       display: inline-flex;
@@ -103,14 +103,13 @@
       margin: 0;
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      gap: 0.4rem;
     }
     figure img {
       width: 100%;
-      border: 1px solid rgba(15, 23, 42, 0.12);
     }
     figcaption {
-      font-size: 0.95rem;
+      font-size: 0.85rem;
       color: rgba(17, 24, 39, 0.7);
     }
     .grid {
@@ -135,12 +134,25 @@
       background: #f8fafc;
       border: 1px solid rgba(15, 23, 42, 0.06);
       font-weight: 500;
+      font-size: 1.05rem;
     }
-    footer {
-      text-align: center;
-      padding: 2.5rem 1rem 3rem;
-      color: rgba(17, 24, 39, 0.6);
-      font-size: 0.95rem;
+    .takeaway-item {
+      position: relative;
+      padding: 1.25rem 1.5rem 1.25rem 3.5rem;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, rgba(76, 81, 191, 0.05), rgba(76, 81, 191, 0.02));
+      border-radius: 16px;
+      line-height: 1.7;
+      font-size: 1.05rem;
+    }
+    .takeaway-item:last-child {
+      margin-bottom: 0;
+    }
+    .takeaway-item .emoji {
+      position: absolute;
+      left: 1.25rem;
+      top: 1.25rem;
+      font-size: 1.5rem;
     }
     a {
       color: var(--accent);
@@ -161,8 +173,9 @@
 </head>
 <body>
   <header>
-    <h1>Resource-efficient Foundation Model Programs</h1>
-    <p>Program-guided multimodal reasoning that learns to route tasks across foundation model backends, delivering up to 98% cost savings with minimal accuracy loss on streaming VQA benchmarks.</p>
+    <h1>Resource-efficient Inference with<br/> Foundation Model Programs</h1>
+    <p style="font-size: 1.2rem; font-weight: 600; margin-bottom: 0.5rem;">Cheaper serving for Agentic AI Systems</p>
+    <p style="font-size: 1rem; margin-bottom: 0.75rem;">We turn agentic tasks into Foundation Model Programs and learn to dynamically select cheaper vs. stronger model backends per subtask & per input, <strong>cutting inference cost by up to 98%</strong>.</p>
     <div class="cta-buttons">
       <a class="cta-button" href="https://arxiv.org/abs/2504.07247" target="_blank" rel="noopener">📄 Paper</a>
       <a class="cta-button" href="https://github.com/Flitternie/FMProgramming" target="_blank" rel="noopener">💻 Code</a>
@@ -172,66 +185,49 @@
   <main>
     <section>
       <h2>Key Takeaways</h2>
-      <ul class="pill-list">
-        <li>Program synthesis captures task structure</li>
-        <li>Gradient Thompson Sampling adapts to inputs</li>
-        <li>Structured REINFORCE allocates resources</li>
-        <li>Lightweight detectors screen easy cases</li>
-        <li>High-capacity MLLMs reserved for hard queries</li>
-      </ul>
+      <div class="takeaway-item"><span class="emoji">🧩</span>Treat complex AI tasks as <strong>programs</strong> with explicit steps and branches so <strong>cheap modules</strong> handle easy cases and <strong>expensive models</strong> are reserved for the hard ones.</div>
+      <div class="takeaway-item"><span class="emoji">⚖️</span>Optimize an <strong>online policy</strong> that jointly <strong>balances accuracy and compute</strong> per input, rather than chasing accuracy alone with a fixed model stack.</div>
+      <div class="takeaway-item"><span class="emoji">🔌</span><strong>Separate task logic from model backends</strong> to stay <strong>modular</strong>, swap components as models evolve, and continually improve the <strong>accuracy–cost Pareto frontier</strong>.</div>
     </section>
 
     <section>
-      <h2>Program-guided Routing</h2>
+      <h2>Foundation Model Programming</h2>
       <figure>
-        <img src="https://arxiv.org/html/2504.07247v2/x1.png" alt="Foundation model program illustration from the paper." loading="lazy" />
-        <figcaption>Foundation Model Programs orchestrate detectors, filters, and vision-language models through modular control flow to reduce redundant inference.</figcaption>
+        <img src="assets/main.png" alt="Foundation model program illustration from the paper." loading="lazy" />
+        <figcaption>Instead of sending every input to one big model, we program the task into steps and let a small policy pick the cheapest suitable backend per call.</figcaption>
       </figure>
-      <div class="grid two" style="margin-top: 1.75rem;">
-        <div class="badge">Offline synthesis produces modular branches with early-exit conditions learned from demonstrations.</div>
-        <div class="badge">Online routing observes intermediate rewards, applying Gradient Thompson Sampling to select the most cost-effective backend.</div>
-        <div class="badge">Streaming feedback updates module preferences after each example, shrinking reliance on expensive models over time.</div>
-        <div class="badge">Program structure generalizes across tasks, allowing detectors and VLMs to be swapped in without retraining policies.</div>
+      <div class="badge-group" style="margin-top: 1.75rem;">
+        <div class="badge"><strong>Program agent as FMPs:</strong> Express agentic task as neurosymbolic program that calls generic functions (e.g., object detector, VQA), each with a set of backend models spanning cost–quality trade-offs.</div>
+        <div class="badge"><strong>Decide per call, online:</strong> Synthesize the program offline, then—at inference—learn a policy that picks the backend for each function call to optimize an accuracy–cost objective on every input.</div>
+        <div class="badge"><strong>Learn with structure &amp; exploration:</strong> Use structured REINFORCE for per-call credit assignment and gradient-based Thompson Sampling to explore backends, balancing prediction loss against execution cost.</div>
       </div>
     </section>
 
     <section>
-      <h2>Streaming Benchmarks</h2>
+      <h2>Streaming VQA Benchmarks</h2>
       <div class="grid two">
         <div class="badge-group">
-          <div class="badge"><strong>Streaming Binary VQA:</strong> 33 compositional queries &gt;2K images each, testing spatial, logical, and numerical reasoning over sequences.</div>
-          <div class="badge"><strong>Streaming Open-form VQA:</strong> 50 diverse prompts with diffusion-generated imagery, including unanswerable distractors to probe robustness.</div>
+          <div class="badge"><strong>Streaming Binary VQA:</strong> 33 compositional yes/no queries, each with >2k COCO images and a ~1:100 positive–negative imbalance.</div>
+          <div class="badge"><strong>Streaming Open-form VQA:</strong> 50 queries with 500 images each, featuring look-alike distractors across five reasoning types.</div>
         </div>
         <figure>
-          <img src="https://arxiv.org/html/2504.07247v2/x2.png" alt="Benchmark illustration from the paper." loading="lazy" />
+          <img src="assets/dataset.png" alt="Benchmark illustration from the paper." loading="lazy" />
           <figcaption>Examples from the streaming open-form VQA benchmark curated to stress long-tail reasoning and adversarial scenarios.</figcaption>
         </figure>
       </div>
     </section>
 
     <section>
-      <h2>Project &amp; Citation</h2>
-      <div class="grid two">
-        <div class="badge-group">
-          <div class="badge"><strong>Authors:</strong> Lydia T. Nie, Kevin Yu, Marco Cheung, Christopher Jermaine, Swarat Chaudhuri</div>
-          <div class="badge"><strong>Institutions:</strong> The University of Texas at Austin &amp; Rice University</div>
-          <div class="badge">Presented in “Resource-efficient Inference with Foundation Model Programs”.</div>
-        </div>
-        <div class="badge-group">
-          <pre id="bibtex" style="margin:0; padding:1.25rem; background:#f8fafc; border:1px solid rgba(15,23,42,0.08); border-radius:12px; font-size:0.9rem; overflow-x:auto;">@article{nie2025resource,
+      <h2>Citation</h2>
+      <pre id="bibtex" style="margin:0; padding:1.25rem; background:#f8fafc; border:1px solid rgba(15,23,42,0.08); border-radius:12px; font-size:0.9rem; overflow-x:auto;">@article{nie2025resource,
   title={Resource-efficient Inference with Foundation Model Programs},
   author={Nie, Lunyiu and Ding, Zhimin and Yu, Kevin and Cheung, Marco and Jermaine, Chris and Chaudhuri, Swarat},
   journal={arXiv preprint arXiv:2504.07247},
   year={2025}
 }</pre>
-          <button id="copy-bibtex" class="cta-button" style="align-self:flex-start;">📋 Copy BibTeX</button>
-        </div>
-      </div>
+      <button id="copy-bibtex" class="cta-button" style="margin-top:0.75rem; border: none; cursor: pointer; box-shadow: none;">📋 Copy BibTeX</button>
     </section>
   </main>
-  <footer>
-    Content and imagery reproduced from the arXiv paper “Resource-efficient Inference with Foundation Model Programs” (2025).
-  </footer>
   <script>
     document.getElementById("copy-bibtex").addEventListener("click", () => {
       const text = document.getElementById("bibtex").innerText;
